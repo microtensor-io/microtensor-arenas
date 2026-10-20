@@ -157,7 +157,7 @@ def generate(
     for row in rows(source):
         if all(made[test] >= n for test, n in wanted):
             break
-        if rng.random() > ACCEPT:
+        if source == "hf" and rng.random() > ACCEPT:
             continue
         session = trajectory.parse(row)
         if not session.instance_id or session.instance_id in used or len(session.steps) < 8:
