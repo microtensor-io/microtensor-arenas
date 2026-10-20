@@ -148,7 +148,7 @@ def mechanism(scoring: dict[str, Any], envelope: dict[str, Any]) -> list[dict[st
         {
             "name": "Paid when",
             "formula": (
-                f"n ≥ {MIN_ITEMS} and the paired lower bound of (miner − reference model) per item, "
+                f"n ≥ {scoring['min_items']} and the paired lower bound of (miner − reference model) per item, "
                 "clustered by family, is above 0"
             ),
         },
@@ -305,7 +305,7 @@ def build(arena: dict[str, Any]) -> dict[str, Any]:
                         "per item pass difference, clustered by family"
                     ),
                 },
-                {"name": "Paid when", "formula": f"n ≥ {MIN_ITEMS} and S_h > 0"},
+                {"name": "Paid when", "formula": f"n ≥ {scoring['min_items']} and S_h > 0"},
             ],
         },
         "router": {
@@ -326,7 +326,7 @@ def build(arena: dict[str, Any]) -> dict[str, Any]:
                 {
                     "name": "Paid when",
                     "formula": (
-                        f"n ≥ {MIN_ITEMS} and the 5th percentile of S_e − S_ref over "
+                        f"n ≥ {scoring['min_items']} and the 5th percentile of S_e − S_ref over "
                         f"{RESAMPLES} family resamples is above 0"
                     ),
                 },
@@ -346,7 +346,7 @@ def build(arena: dict[str, Any]) -> dict[str, Any]:
                     ),
                 },
                 {"name": "Score", "formula": "S_sys = mean of v_f over the floors"},
-                {"name": "Paid when", "formula": f"n ≥ {MIN_ITEMS} and S_sys > 0"},
+                {"name": "Paid when", "formula": f"n ≥ {scoring['min_items']} and S_sys > 0"},
             ],
         },
         "scoring": {
