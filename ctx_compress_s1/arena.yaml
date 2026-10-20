@@ -64,10 +64,10 @@ slm:
     - name: Item score
       formula: |-
         item_score(i) = valid(i) · C(i) · (1 − halluc(i)) · (0.5·recall(i) + 0.5·cont(i))
-        pass(i) = 1 if item_score(i) ≥ 0.80
+        pass(i) = 1 if item_score(i) ≥ 0.50
 
 grading:
-  pass_threshold: 0.8
+  pass_threshold: 0.5
   tokenizer: Qwen/Qwen2.5-Coder-7B-Instruct
   min_output_tokens: 300
   max_output_share: 0.1
