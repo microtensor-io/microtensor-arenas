@@ -23,13 +23,16 @@ LETTERS = "abcd"
 INSTRUCTION = (
     "You compact a coding agent's session so the agent can continue from your summary alone. "
     "The session is inside <session> tags. Reply with one JSON object and nothing else, with "
-    "these fields: summary (the task, what was tried, what failed, where the work stands and the "
-    "next step), files_touched (every file path the agent opened, created or edited), open_tasks "
-    "(what is left to do), errors (each error or failing check, with its exact message), "
-    "decisions (each change made or approach chosen, and why). Say which file the agent was "
-    "working on last and whether its latest test run passed. Copy file paths, function names "
-    "and error messages exactly as they appear. Use only facts from the session. Keep the "
-    "reply within {budget} tokens."
+    "exactly these five fields and no others: "
+    '{{"summary": "...", "files_touched": ["..."], "open_tasks": ["..."], "errors": ["..."], '
+    '"decisions": ["..."]}}. '
+    "summary is one string: the task, what was tried, what failed, which file the agent was "
+    "working on last, whether its latest test run passed, and the next step. files_touched lists "
+    "every file path the agent opened, created or edited. open_tasks lists what is left to do. "
+    "errors lists each error or failing check with its exact message. decisions lists each change "
+    "made or approach chosen, with why, in one sentence. Every list entry is a plain string, "
+    "never an object. Copy file paths, function names and error messages exactly as they appear. "
+    "Use only facts from the session. Keep the reply within {budget} tokens."
 )
 
 
