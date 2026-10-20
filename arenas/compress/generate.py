@@ -70,7 +70,7 @@ def rows(source: str) -> Iterator[dict[str, Any]]:
                         yield json.loads(line)
 
 
-def _cuts(session: trajectory.Session, rng: random.Random) -> list[int]:
+def _cuts(session: trajectory.Session, rng: random.Random, limit: int = CUTS_TRIED) -> list[int]:
     total = len(session.steps)
     found = [
         index
@@ -78,7 +78,7 @@ def _cuts(session: trajectory.Session, rng: random.Random) -> list[int]:
         if session.steps[index - 1].role == "tool"
     ]
     rng.shuffle(found)
-    return found[:CUTS_TRIED]
+    return found[:limit]
 
 
 def make_item(
@@ -140,6 +140,7 @@ def generate(
     source: str = "hf",
     twins: tuple[str, ...] = ("slm",),
     count: Callable[[str], int] | None = None,
+    per_session: int = 1,
 ) -> Pool:
     measure = count or counter()
     rng = random.Random(seed)
@@ -155,27 +156,33 @@ def generate(
         session = trajectory.parse(row)
         if not session.instance_id or session.instance_id in used or len(session.steps) < 8:
             continue
-        test = next(t for t, n in wanted if made[t] < n)
-        cuts = _cuts(session, rng)
-        item = _first(session, cuts, measure, f"{arena_id}-{test}-{made[test]:05d}", test)
-        if item is None:
-            continue
-        used.add(session.instance_id)
-        pool.items.append(item)
-        if test in twins:
+        needed = [t for t, n in wanted if made[t] < n][: max(1, per_session)]
+        cuts = _cuts(session, rng, CUTS_TRIED * max(1, per_session))
+        taken: list[int] = []
+        for test in needed:
+            free = [c for c in cuts if all(abs(c - t) >= TWIN_GAP for t in taken)]
+            stem = f"{arena_id}-s{seed}-{test}"
+            item = _first(session, free, measure, f"{stem}-{made[test]:05d}", test)
+            if item is None:
+                continue
             cut = item["label"]["cut"]
-            others = [c for c in cuts if abs(c - cut) >= TWIN_GAP]
-            twin = _first(
-                session,
-                others,
-                measure,
-                f"{arena_id}-{test}-twin-{made[test]:05d}",
-                test,
-                twin_of=item["item_id"],
-            )
-            if twin is not None:
-                pool.items.append(twin)
-        made[test] += 1
+            taken.append(cut)
+            pool.items.append(item)
+            if test in twins:
+                others = [c for c in cuts if abs(c - cut) >= TWIN_GAP]
+                twin = _first(
+                    session,
+                    others,
+                    measure,
+                    f"{stem}-twin-{made[test]:05d}",
+                    test,
+                    twin_of=item["item_id"],
+                )
+                if twin is not None:
+                    pool.items.append(twin)
+            made[test] += 1
+        if taken:
+            used.add(session.instance_id)
     return pool
 
 
