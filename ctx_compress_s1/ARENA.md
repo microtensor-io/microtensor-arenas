@@ -37,23 +37,23 @@ valid(i) = 1 if the output parses as JSON and matches the schema, otherwise 0
 
 *Key fact recall*
 
-Each session has a reference list of key facts (file paths, function names, error messages, decisions and open tasks). Identifiers match exactly after normalisation.
+Each session has a reference list of key facts, the file paths, exception types and function names in it. Identifiers match exactly after normalisation.
 ```
 recall(i) = facts_kept / facts_total
 ```
 
 *Hallucination rate*
 
-Identifiers in the output that never appear in the session.
+Code identifiers in the output (paths, exception types, backticked code and name( calls) that never appear in the session. Common tool and brand names do not count.
 ```
 halluc(i) = invented_identifiers / identifiers_in_output
 ```
 
 *Continuation check*
 
-A fixed reference agent answers probe questions about the session using only the summary.
+A fixed reference agent reads all five fields and answers probe questions from them alone: which issue the agent is working on (one of four), whether its latest test run passed, whether it has changed a file, its most recent edit and error, and its next action (kind and file), scored against what it actually did next. The next action scores 0.5 for the kind or the file alone.
 ```
-cont(i) = probes_correct / probes_total
+cont(i) = mean probe score over the item's probes
 ```
 
 *Compression gate*

@@ -18,14 +18,18 @@ MIN_PROBES = 2
 TWIN_GAP = 6
 ACCEPT = 0.25
 CUTS_TRIED = 8
+GOAL_CHOICES = 4
+LETTERS = "abcd"
 INSTRUCTION = (
     "You compact a coding agent's session so the agent can continue from your summary alone. "
     "The session is inside <session> tags. Reply with one JSON object and nothing else, with "
-    "these fields: summary (the task, what was tried and where the work stands), files_touched "
-    "(every file path the agent opened, created or edited), open_tasks (what is left to do), "
-    "errors (each error or failing check, with its exact message), decisions (each change made "
-    "or approach chosen, and why). Copy file paths, function names and error messages exactly "
-    "as they appear. Use only facts from the session. Keep the reply within {budget} tokens."
+    "these fields: summary (the task, what was tried, what failed, where the work stands and the "
+    "next step), files_touched (every file path the agent opened, created or edited), open_tasks "
+    "(what is left to do), errors (each error or failing check, with its exact message), "
+    "decisions (each change made or approach chosen, and why). Say which file the agent was "
+    "working on last and whether its latest test run passed. Copy file paths, function names "
+    "and error messages exactly as they appear. Use only facts from the session. Keep the "
+    "reply within {budget} tokens."
 )
 
 
@@ -91,14 +95,15 @@ def make_item(
 ) -> dict[str, Any] | None:
     seen = trajectory.observe(session, cut)
     found_facts = facts.facts(seen)
-    found_probes = facts.probes(seen)
+    found_probes = facts.probes(seen, session, cut)
     if len(found_facts) < MIN_FACTS or len(found_probes) < MIN_PROBES:
         return None
     user = trajectory.render(session, cut)
     session_tokens = count(user)
     if not MIN_SESSION_TOKENS <= session_tokens <= MAX_SESSION_TOKENS:
         return None
-    system = INSTRUCTION.format(budget=max(300, int(0.1 * session_tokens)))
+    budget = max(300, int(0.1 * (session_tokens + count(INSTRUCTION.format(budget=99999)))))
+    system = INSTRUCTION.format(budget=budget)
     input_tokens = session_tokens + count(system)
     return {
         "item_id": item_id,
@@ -108,9 +113,10 @@ def make_item(
             "facts": found_facts,
             "probes": found_probes,
             "input_tokens": input_tokens,
-            "budget_tokens": max(300, int(0.1 * input_tokens)),
+            "budget_tokens": budget,
             "cut": cut,
             "instance": session.instance_id,
+            "goal": trajectory.goal_of(session),
         },
         "tests": [test],
         "twin_of": twin_of,
@@ -183,7 +189,27 @@ def generate(
             made[test] += 1
         if taken:
             used.add(session.instance_id)
+    add_goal_probes(pool, rng)
     return pool
+
+
+def add_goal_probes(pool: Pool, rng: random.Random) -> None:
+    goals = {item["family"]: item["label"].get("goal", "") for item in pool.items}
+    for item in pool.items:
+        goal = item["label"].pop("goal", "")
+        others = sorted({g for f, g in goals.items() if g and f != item["family"] and g != goal})
+        if not goal or len(others) < GOAL_CHOICES - 1:
+            continue
+        options = [goal, *rng.sample(others, GOAL_CHOICES - 1)]
+        rng.shuffle(options)
+        lines = "\n".join(f"{LETTERS[i].upper()}) {text}" for i, text in enumerate(options))
+        item["label"]["probes"].append(
+            {
+                "type": "choice",
+                "question": f"Which issue is the agent working on? Answer A, B, C or D.\n{lines}",
+                "answers": [LETTERS[options.index(goal)]],
+            }
+        )
 
 
 def check(pool: Pool) -> list[str]:
@@ -199,6 +225,8 @@ def check(pool: Pool) -> list[str]:
             if not any(facts.mentions(session, alias) for alias in fact["aliases"]):
                 problems.append(f"{item['item_id']}: fact {fact['value']} not in the session")
         for probe in label["probes"]:
+            if probe.get("type", "exact") != "exact":
+                continue
             if not any(facts.mentions(session, answer) for answer in probe["answers"]):
                 problems.append(
                     f"{item['item_id']}: probe answer {probe['answers'][0]} not in the session"

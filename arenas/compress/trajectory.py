@@ -26,6 +26,38 @@ READERS = frozenset(
 )
 REDIRECT = re.compile(r"(?:^|\s)(?:\d?>>?|tee(?:\s+-a)?)\s*['\"]?([^\s'\";|&]+)")
 RETURN_CODE = re.compile(r"<returncode>(-?\d+)</returncode>")
+TEST_COMMAND = re.compile(r"\b(?:pytest|py\.test|tox|nox|unittest|manage\.py test|make test)\b")
+INSTALL_COMMAND = re.compile(
+    r"\b(?:pip3? install|apt(?:-get)? install|conda install|uv pip install)\b"
+)
+READ_VERBS = frozenset(
+    {
+        "open",
+        "goto",
+        "scroll_down",
+        "scroll_up",
+        "search_file",
+        "search_dir",
+        "find_file",
+        "find",
+        "ls",
+        "cat",
+        "head",
+        "tail",
+        "nl",
+        "grep",
+        "sed",
+        "less",
+        "awk",
+        "wc",
+        "tree",
+    }
+)
+EDIT_VERBS = frozenset({"edit", "str_replace", "insert", "create", "apply_patch"})
+RUN_VERBS = frozenset({"python", "python3", "bash", "sh", "node"})
+KINDS = ("read", "edit", "test", "run", "install", "other")
+ISSUE_TAG = re.compile(r"<issue>\s*(.*?)\s*</issue>", re.DOTALL)
+ISSUE_HEADER = re.compile(r"ISSUE:\s*\n?(.*)", re.DOTALL)
 
 
 @dataclass(slots=True)
@@ -63,6 +95,7 @@ class Observed:
     errors: list[tuple[str, str]] = field(default_factory=list)
     frames: list[tuple[str, str]] = field(default_factory=list)
     symbols: list[str] = field(default_factory=list)
+    tests: list[bool] = field(default_factory=list)
 
 
 def _command(text: str) -> str:
@@ -144,6 +177,58 @@ def _succeeded(text: str) -> bool:
     return found is None or found.group(1) == "0"
 
 
+def kind_of(command: str) -> str:
+    lines = command.strip().splitlines()
+    first = lines[0] if lines else ""
+    words = first.split()
+    if not words:
+        return "other"
+    if TEST_COMMAND.search(first):
+        return "test"
+    if INSTALL_COMMAND.search(first):
+        return "install"
+    _, edits, created = shell_targets(command)
+    if words[0] in EDIT_VERBS or edits or created:
+        return "edit"
+    if words[0] in READ_VERBS:
+        return "read"
+    if words[0] in RUN_VERBS:
+        return "run"
+    return "other"
+
+
+def goal_of(session: Session) -> str:
+    text = session.steps[0].text if session.steps else ""
+    found = ISSUE_TAG.search(text) or ISSUE_HEADER.search(text)
+    body = found.group(1) if found else text
+    for line in body.splitlines():
+        if line.strip():
+            return " ".join(line.split())[:160]
+    return ""
+
+
+def next_action(session: Session, cut: int) -> tuple[str, str] | None:
+    for step in session.steps[cut:]:
+        if step.role != "agent" or not step.command:
+            continue
+        reads, edits, created = shell_targets(step.command)
+        words = step.command.split()
+        named = [words[1]] if words[0] in ("open", "create", "edit") and len(words) > 1 else []
+        if words[0] == "edit":
+            named = []
+        targets = edits or created or named or reads
+        return kind_of(step.command), session.relative(targets[0]) if targets else ""
+    return None
+
+
+def _passed(text: str) -> bool:
+    found = RETURN_CODE.search(text)
+    if found is not None:
+        return found.group(1) == "0"
+    lowered = text.lower()
+    return " failed" not in lowered and "error" not in lowered
+
+
 def _add(found: list[str], value: str) -> None:
     if value and value not in found:
         found.append(value)
@@ -154,10 +239,12 @@ def observe(session: Session, upto: int) -> Observed:
     current = ""
     pending_edit = False
     pending: tuple[list[str], list[str], list[str]] = ([], [], [])
+    testing = False
     for step in session.steps[:upto]:
         if step.role == "agent":
             command = step.command
             pending = shell_targets(command)
+            testing = kind_of(command) == "test"
             first = command.splitlines()[0] if command else ""
             words = first.split()
             if words and words[0] == "open" and len(words) > 1:
@@ -181,6 +268,9 @@ def observe(session: Session, upto: int) -> Observed:
             for path in map(session.relative, edits):
                 _add(seen.edited, path)
         pending = ([], [], [])
+        if testing:
+            seen.tests.append(_passed(step.text))
+        testing = False
         header = FILE_HEADER.search(step.text)
         if header:
             current = session.relative(header.group(1))
