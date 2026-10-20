@@ -26,6 +26,8 @@ def group(name: str) -> dict[str, Any]:
     found: dict[str, Any] = groups[name]
     if found.get("reserved"):
         raise ValueError(f"envelope group {name} is reserved")
+    if not found.get("open"):
+        raise ValueError(f"envelope group {name} is not open; it opens in {found.get('opens')}")
     return found
 
 
@@ -97,8 +99,9 @@ def serving_class(resolved: dict[str, Any]) -> str:
 
 
 def lower(name: str) -> list[str]:
-    names = list(document("envelopes")["groups"])
-    return names[: names.index(name)]
+    groups = document("envelopes")["groups"]
+    names = list(groups)
+    return [n for n in names[: names.index(name)] if groups[n].get("open")]
 
 
 def base(model: str) -> dict[str, Any]:

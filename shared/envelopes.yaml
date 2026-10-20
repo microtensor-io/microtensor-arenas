@@ -1,27 +1,51 @@
-version: 1
+version: 2
 season: 1
 docs: https://microtensor.cloud/docs/certified-inference/system/envelope-groups
 violation_share: 0.01
 min_bits: 4
+max_open: 4
 rules:
-  - Each arena uses the lowest group its task fits. Most arenas are mt-1 or mt-2; mt-3 is for tasks that truly need long inputs or long answers.
-  - An arena can make a limit stricter but never looser. If it needs more, it moves up a group.
+  - Each arena uses the lowest class its task fits. Most arenas belong in mt-2 or mt-3; mt-5 is for tasks that truly need long inputs or long answers.
+  - An arena can make a limit stricter but never looser. If it needs more, it moves up a class.
+  - At most four classes are open in a season, because every open class splits the same competition and needs its own reference hardware. Season 1 opens mt-2, mt-3 and mt-5; mt-1 and mt-4 open in season 2 once they are benchmarked.
   - Nothing below 4 bit precision, because hallucinations jump at 3 bit and 2 bit.
-  - Groups are frozen for the whole season. Changes ship as a new version before the next season.
+  - Classes are frozen for the whole season. Changes ship as a new version before the next season.
   - A system that goes over any limit on more than 1% of items fails the envelope and scores zero for that epoch.
-  - Systems are also tested on the groups below their arena's. Passing a lower group gives the edge ready flag and the edge bonus in the SLM score.
+  - Systems are also tested on the open classes below their arena's. Passing a lower class gives the edge ready flag and the edge bonus in the SLM score.
 measurement:
-  - mt-1 and mt-2 run llama.cpp with GGUF weights on CPU, with a fixed thread count and a cgroups memory cap. mt-1 runs on an ARM instance with 4 threads and 2 GB, mt-2 on x86 with 8 threads and 4 GB.
-  - mt-3 runs vLLM on the reference 24 GB GPU.
+  - mt-1, mt-2 and mt-3 run llama.cpp with GGUF weights on CPU, with a fixed thread count and a cgroups memory cap. mt-1 runs on an ARM instance with 2 threads and 1 GB so it behaves like a budget phone, mt-2 on the same ARM instance with 4 threads and 2 GB, and mt-3 on x86 with 8 threads and 4 GB.
+  - mt-4 runs llama.cpp with GGUF weights on a GPU, with the model's footprint held to 8 GB. Phone and laptop NPUs from Qualcomm, Intel and AMD all differ, so validators cannot measure each one fairly and none is used.
+  - mt-5 runs vLLM on the reference 24 GB GPU.
   - Speed is the p95 across the full hidden eval set at concurrency 1.
   - First token time includes reading the whole input.
   - Memory is the peak during the run, including the KV cache.
   - Once a season, the CPU numbers are spot checked against a few real phones.
 groups:
   mt-1:
+    name: Budget phone
+    stands_for: phones under $200 with 3 to 4 GB of RAM
+    fits: intent, tagging, language ID and short classification
+    why: 1 GB is what a 3 to 4 GB phone can spare for one app.
+    open: false
+    opens: season 2
+    runtime: llama.cpp
+    device: cpu
+    formats: [gguf]
+    precision: [Q4_K_M, Q5_K_S, Q5_K_M, Q6_K, Q8_0]
+    parameters: {max: 600000000}
+    memory_gb: 1
+    max_input_tokens: 512
+    max_output_tokens: 128
+    ttft_p95_ms: 4000
+    min_tokens_per_s: 10
+    reference: {arch: arm64, threads: 2, memory_cap_gb: 1, machine: GCP c4a-standard-4}
+    placeholder: true
+  mt-2:
     name: Phone
-    summary: Mid to high end phones running offline.
-    fits: classification, intent, tagging, titling and spotting personal data in short text
+    stands_for: phones with 8 to 12 GB of RAM
+    fits: classification, personal data detection and titling
+    why: 2 GB is a safe share of an 8 GB phone.
+    open: true
     runtime: llama.cpp
     device: cpu
     formats: [gguf]
@@ -34,10 +58,12 @@ groups:
     min_tokens_per_s: 20
     reference: {arch: arm64, threads: 4, memory_cap_gb: 2, machine: GCP c4a-standard-4}
     placeholder: true
-  mt-2:
+  mt-3:
     name: CPU
-    summary: Ordinary laptops, office desktops and small edge boxes with no GPU.
-    fits: extraction, SQL, short document Q&A and redaction
+    stands_for: ordinary laptops and desktops with no GPU
+    fits: extraction, SQL, redaction and short Q&A
+    why: 4 GB is a share of an ordinary laptop.
+    open: true
     runtime: llama.cpp
     device: cpu
     formats: [gguf]
@@ -50,10 +76,31 @@ groups:
     min_tokens_per_s: 10
     reference: {arch: x86_64, threads: 8, memory_cap_gb: 4, machine: GCP n2d-standard-8}
     placeholder: true
-  mt-3:
+  mt-4:
+    name: AI PC
+    stands_for: Copilot+ laptops and consumer GPUs with 8 to 16 GB
+    fits: document Q&A, longer extraction and code help
+    why: 8 GB holds a 4 bit 8B model on a 16 GB AI PC or a mid range GPU.
+    open: false
+    opens: season 2
+    runtime: llama.cpp
+    device: gpu
+    formats: [gguf]
+    precision: [Q4_K_M, Q5_K_S, Q5_K_M, Q6_K, Q8_0]
+    parameters: {max: 8000000000}
+    memory_gb: 8
+    max_input_tokens: 8192
+    max_output_tokens: 1024
+    ttft_p95_ms: 6000
+    min_tokens_per_s: 25
+    reference: {gpus: 1, memory_gb: 8, machine: a GPU held to 8 GB, named after the benchmark}
+    placeholder: true
+  mt-5:
     name: Small GPU
-    summary: Only for tasks that need long inputs or long answers.
-    fits: context compression, contract review and long summaries
+    stands_for: a 24 GB server GPU such as an L4 or RTX 4090
+    fits: context compression, contracts and long summaries
+    why: 24 GB is the first cloud price step, about $0.20 to $1.00 an hour.
+    open: true
     runtime: vLLM
     device: gpu
     formats: [safetensors]
@@ -67,12 +114,17 @@ groups:
     reference: {gpus: 1, memory_gb: 24, machine: named after the benchmark}
     serving_class: gpu_24gb
     placeholder: true
-  mt-4:
+  mt-6:
     name: Large
-    summary: Reserved for vision and harder code later, with limits set when it is needed.
+    stands_for: a 48 to 80 GB server GPU such as an L40S or A100
+    fits: vision and harder code
+    why: 48 and 80 GB are the next cloud price steps.
+    open: false
+    opens: when an arena needs it, with limits set then
     runtime: vLLM
     device: gpu
     formats: [safetensors]
     parameters: {min: 8000000000, max: 32000000000}
-    memory_gb: 48
+    memory_min_gb: 48
+    memory_gb: 80
     reserved: true

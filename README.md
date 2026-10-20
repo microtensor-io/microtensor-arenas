@@ -6,8 +6,8 @@ Every arena on the network, as the files the definitions are built from. The pag
 
 | Arena | Task | Envelope | Network | Season |
 |---|---|---|---|---|
-| [ctx_compress_s1](ctx_compress_s1/ARENA.md) | Agent context compression | mt-3 | testnet | 1 |
-| [sql_gen_s1](sql_gen_s1/ARENA.md) | Databases: SQL generation | mt-3 | testnet | 1 |
+| [ctx_compress_s1](ctx_compress_s1/ARENA.md) | Agent context compression | mt-5 | testnet | 1 |
+| [sql_gen_s1](sql_gen_s1/ARENA.md) | Databases: SQL generation | mt-5 | testnet | 1 |
 
 Each folder holds:
 
@@ -23,7 +23,7 @@ Each folder holds:
 
 | File | What it is |
 |---|---|
-| `shared/envelopes.yaml` | The envelope groups mt-1 Phone, mt-2 CPU, mt-3 Small GPU and mt-4 Large (reserved), their rules and how validators measure them |
+| `shared/envelopes.yaml` | The six envelope classes (mt-1 Budget phone, mt-2 Phone, mt-3 CPU, mt-4 AI PC, mt-5 Small GPU, mt-6 Large), which are open this season, their rules and how validators measure them |
 | `shared/bases.yaml` | Every allowed base model with its pinned revision, licence, size, the groups it fits and any licence condition |
 
 An arena names one group and may only tighten its limits. Its bases come from the shared list and must fit its group. The same values are served at `GET /v2/envelopes` and `GET /v2/bases`.

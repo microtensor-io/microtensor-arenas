@@ -65,7 +65,7 @@ n ≥ 400 and the paired lower bound of (miner − reference model) per item, cl
 
 ## 3. Envelope
 
-[mt-3 Small GPU](https://microtensor.cloud/docs/certified-inference/system/envelope-groups)
+[mt-5 Small GPU](https://microtensor.cloud/docs/certified-inference/system/envelope-groups)
 
 Stricter limits in this arena:
 
