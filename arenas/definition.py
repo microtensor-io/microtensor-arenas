@@ -25,6 +25,7 @@ SCORING: dict[str, Any] = {
     "cap": 1.0,
     "empty_pools": "redistribute",
     "router": "floors_brier",
+    "min_items": 400,
 }
 
 
