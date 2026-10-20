@@ -10,8 +10,15 @@ FENCE = re.compile(r"```([a-zA-Z]*)\n(.*?)```", re.DOTALL)
 SHELLS = ("", "bash", "sh", "shell", "console")
 FILE_HEADER = re.compile(r"\[File: (/[^\s\]]+) \(\d+ lines total\)\]")
 FRAME = re.compile(r'File "([^"]+)", line \d+, in ([A-Za-z_]\w*)')
+PYTEST_FRAME = re.compile(r"^([\w./-]+\.py):\d+: in ([A-Za-z_]\w*)", re.MULTILINE)
+MISSING = (
+    "No such file or directory",
+    "cannot access",
+    "file or directory not found",
+    "can't open file",
+)
 ERROR_LINE = re.compile(
-    r"^\s*(?:E\d+\s+)?([A-Za-z_][\w.]*(?:Error|Exception))\b(?::\s*(.*))?$", re.MULTILINE
+    r"^\s*(?:E\d*\s+)?([A-Za-z_][\w.]*(?:Error|Exception))\b(?::\s*(.*))?$", re.MULTILINE
 )
 DEF = re.compile(
     r"^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(|^\s*class\s+([A-Za-z_]\w*)", re.MULTILINE
@@ -266,9 +273,10 @@ def observe(session: Session, upto: int) -> Observed:
         known = {*seen.opened, *seen.created, *seen.edited}
         for path in map(session.relative, written):
             _add(seen.edited if path in known else seen.created, path)
-        if _succeeded(step.text):
+        if not any(marker in step.text for marker in MISSING):
             for path in map(session.relative, reads):
                 _add(seen.opened, path)
+        if _succeeded(step.text):
             for path in map(session.relative, edits):
                 _add(seen.edited, path)
         pending = ([], [], [])
@@ -282,7 +290,7 @@ def observe(session: Session, upto: int) -> Observed:
         if pending_edit and current and "File updated" in step.text:
             _add(seen.edited, current)
         pending_edit = False
-        for path, function in FRAME.findall(step.text):
+        for path, function in [*FRAME.findall(step.text), *PYTEST_FRAME.findall(step.text)]:
             if session.in_repo(path):
                 seen.frames.append((session.relative(path), function))
                 if function != "<module>":
