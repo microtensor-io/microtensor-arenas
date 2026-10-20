@@ -9,7 +9,7 @@ import yaml
 from arenas import envelopes, spec
 
 ROOT = Path(__file__).resolve().parent.parent
-ARENA_ID = "sql_gen_s1"
+ARENA_ID = "sql_gen"
 NETWORKS = ("testnet", "mainnet")
 ITEM_COUNTS = {"slm": 400, "harness": 400, "router": 250, "escalation": 120, "system": 400}
 SCORING: dict[str, Any] = {
@@ -173,13 +173,12 @@ def build(
         body["source"] = arena["source"]
     if arena["task"] == "sql_generation":
         if not sample_database:
-            raise ValueError("sql_gen_s1 needs the sha256 of its sample database")
+            raise ValueError("sql_gen needs the sha256 of its sample database")
         body["sample_database"] = sample_database
     timing = arena["timing"]
     return {
         "id": arena["id"],
         "title": arena["title"],
-        "season": arena["season"],
         "network": arena["network"],
         "genesis_block": genesis_block,
         "epoch_blocks": timing["epoch_blocks"],

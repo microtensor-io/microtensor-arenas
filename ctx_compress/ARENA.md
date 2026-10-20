@@ -1,6 +1,6 @@
 # Agent context compression
 
-Arena ID: `ctx_compress_s1` · Season 1 · Category: Text · Network: testnet
+Arena ID: `ctx_compress` · Category: Text · Network: testnet
 
 ## 1. Purpose
 

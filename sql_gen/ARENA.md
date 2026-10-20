@@ -1,6 +1,6 @@
 # Databases: SQL generation
 
-Arena ID: `sql_gen_s1` · Season 1 · Category: Text · Network: testnet
+Arena ID: `sql_gen` · Category: Text · Network: testnet
 
 ## 1. Purpose
 
