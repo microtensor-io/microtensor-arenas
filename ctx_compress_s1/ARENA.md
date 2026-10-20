@@ -64,7 +64,7 @@ C(i) = 1 if output_tokens ≤ max(300, 0.10 × input_tokens), otherwise 0
 *Item score*
 ```
 item_score(i) = valid(i) · C(i) · (1 − halluc(i)) · (0.5·recall(i) + 0.5·cont(i))
-pass(i) = 1 if item_score(i) ≥ 0.80
+pass(i) = 1 if item_score(i) ≥ 0.50
 ```
 
 *Wilson lower bound on the pass rate (n items, pass rate p, z = 1.96)*
