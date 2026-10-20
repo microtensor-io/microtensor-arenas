@@ -9,5 +9,5 @@ Dev split only; hidden items never go in the repo. 80,036 SWE-agent trajectories
 Build dev items in the arena's exact format from it with
 
 ```
-mta dev --arena ctx_compress_s1 --count 200 --out data/dev
+mta dev --arena ctx_compress --count 200 --out data/dev
 ```

@@ -261,7 +261,6 @@ def build(arena: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": arena["id"],
         "title": arena["title"],
-        "season": arena["season"],
         "category": arena["category"],
         "network": arena["network"],
         "purpose": arena["purpose"],
@@ -428,7 +427,7 @@ def markdown(page: dict[str, Any]) -> str:
     lines = [
         f"# {page['title']}",
         "",
-        f"Arena ID: `{page['id']}` · Season {page['season']} · Category: {page['category']} · Network: {page['network']}",
+        f"Arena ID: `{page['id']}` · Category: {page['category']} · Network: {page['network']}",
         "",
         "## 1. Purpose",
         "",

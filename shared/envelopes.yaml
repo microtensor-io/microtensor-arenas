@@ -1,5 +1,4 @@
-version: 2
-season: 1
+version: 3
 docs: https://microtensor.cloud/docs/certified-inference/system/envelope-groups
 violation_share: 0.01
 min_bits: 4
@@ -7,9 +6,9 @@ max_open: 4
 rules:
   - Each arena uses the lowest class its task fits. Most arenas belong in mt-2 or mt-3; mt-5 is for tasks that truly need long inputs or long answers.
   - An arena can make a limit stricter but never looser. If it needs more, it moves up a class.
-  - At most four classes are open in a season, because every open class splits the same competition and needs its own reference hardware. Season 1 opens mt-2, mt-3 and mt-5; mt-1 and mt-4 open in season 2 once they are benchmarked.
+  - At most four classes are open at a time, because every open class splits the same competition and needs its own reference hardware. mt-2, mt-3 and mt-5 are open; mt-1 and mt-4 open once they are benchmarked.
   - Nothing below 4 bit precision, because hallucinations jump at 3 bit and 2 bit.
-  - Classes are frozen for the whole season. Changes ship as a new version before the next season.
+  - Classes change only through a new published version, announced before it applies.
   - A system that goes over any limit on more than 1% of items fails the envelope and scores zero for that epoch.
   - Systems are also tested on the open classes below their arena's. Passing a lower class gives the edge ready flag and the edge bonus in the SLM score.
 measurement:
@@ -19,7 +18,7 @@ measurement:
   - Speed is the p95 across the full hidden eval set at concurrency 1.
   - First token time includes reading the whole input.
   - Memory is the peak during the run, including the KV cache.
-  - Once a season, the CPU numbers are spot checked against a few real phones.
+  - The CPU numbers are spot checked against a few real phones before a class opens and after any new version.
 groups:
   mt-1:
     name: Budget phone
@@ -27,7 +26,7 @@ groups:
     fits: intent, tagging, language ID and short classification
     why: 1 GB is what a 3 to 4 GB phone can spare for one app.
     open: false
-    opens: season 2
+    opens: once benchmarked
     runtime: llama.cpp
     device: cpu
     formats: [gguf]
@@ -82,7 +81,7 @@ groups:
     fits: document Q&A, longer extraction and code help
     why: 8 GB holds a 4 bit 8B model on a 16 GB AI PC or a mid range GPU.
     open: false
-    opens: season 2
+    opens: once benchmarked
     runtime: llama.cpp
     device: gpu
     formats: [gguf]

@@ -1,6 +1,5 @@
-id: ctx_compress_s1
+id: ctx_compress
 title: Agent context compression
-season: 1
 category: Text
 network: testnet
 task: context_compression

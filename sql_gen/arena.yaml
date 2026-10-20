@@ -1,6 +1,5 @@
-id: sql_gen_s1
+id: sql_gen
 title: "Databases: SQL generation"
-season: 1
 category: Text
 network: testnet
 task: sql_generation
