@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -16,6 +17,15 @@ DEF = re.compile(
 )
 EDIT_COMMANDS = ("edit", "str_replace", "insert", "create", "sed -i", "cat >", "apply_patch")
 AGENT_ROLES = ("ai", "assistant")
+EXTENSIONS = (
+    "py|pyi|js|ts|tsx|jsx|go|rs|java|rb|c|h|cc|cpp|hpp|toml|cfg|ini|yaml|yml|json|md|rst|txt|sh"
+)
+PATHLIKE = re.compile(rf"^(?:\./|/)?(?:[\w.@-]+/)*[\w@-][\w.@-]*\.(?:{EXTENSIONS})$")
+READERS = frozenset(
+    {"cat", "head", "tail", "nl", "less", "more", "grep", "sed", "wc", "awk", "python", "python3"}
+)
+REDIRECT = re.compile(r"(?:^|\s)(?:\d?>>?|tee(?:\s+-a)?)\s*['\"]?([^\s'\";|&]+)")
+RETURN_CODE = re.compile(r"<returncode>(-?\d+)</returncode>")
 
 
 @dataclass(slots=True)
@@ -77,9 +87,11 @@ def parse(row: Mapping[str, Any]) -> Session:
         steps.append(Step(role=kind, text=text, command=_command(text) if kind == "agent" else ""))
     if steps:
         steps[0].role = "user"
-    repo = _repo(instance_id)
-    session = Session(instance_id=instance_id, repo=repo, steps=steps)
-    for step in steps:
+    repo = str(row.get("repo") or "").split("/")[-1] or _repo(instance_id)
+    session = Session(
+        instance_id=instance_id, repo=repo, steps=steps, root=str(row.get("root") or "")
+    )
+    for step in steps if not session.root else []:
         header = FILE_HEADER.search(step.text)
         if header:
             parts = header.group(1).split("/")
@@ -87,6 +99,49 @@ def parse(row: Mapping[str, Any]) -> Session:
                 session.root = f"/{parts[1]}/"
                 break
     return session
+
+
+def _paths(tokens: list[str]) -> list[str]:
+    cleaned = (token.strip("'\"") for token in tokens)
+    return [token for token in cleaned if PATHLIKE.match(token)]
+
+
+def shell_targets(command: str) -> tuple[list[str], list[str], list[str]]:
+    lines: list[str] = []
+    for line in command.splitlines():
+        lines.append(line)
+        if "<<" in line:
+            break
+    text = " ".join(lines)
+    reads: list[str] = []
+    edits: list[str] = []
+    created: list[str] = []
+    for segment in re.split(r"&&|\|\||;|\|", text):
+        try:
+            tokens = shlex.split(segment, posix=True)
+        except ValueError:
+            tokens = segment.split()
+        if not tokens:
+            continue
+        verb = tokens[0]
+        rest = [
+            token
+            for index, token in enumerate(tokens[1:], start=1)
+            if not token.startswith(("-", ">", "<")) and tokens[index - 1] not in (">", ">>")
+        ]
+        if verb == "sed" and any(token.startswith("-i") for token in tokens[1:]):
+            edits += _paths(rest[-1:])
+        elif verb == "touch":
+            created += _paths(rest)
+        elif verb in READERS:
+            reads += _paths(rest)
+    created += [target for target in REDIRECT.findall(text) if PATHLIKE.match(target)]
+    return reads, edits, created
+
+
+def _succeeded(text: str) -> bool:
+    found = RETURN_CODE.search(text)
+    return found is None or found.group(1) == "0"
 
 
 def _add(found: list[str], value: str) -> None:
@@ -98,9 +153,11 @@ def observe(session: Session, upto: int) -> Observed:
     seen = Observed()
     current = ""
     pending_edit = False
+    pending: tuple[list[str], list[str], list[str]] = ([], [], [])
     for step in session.steps[:upto]:
         if step.role == "agent":
             command = step.command
+            pending = shell_targets(command)
             first = command.splitlines()[0] if command else ""
             words = first.split()
             if words and words[0] == "open" and len(words) > 1:
@@ -114,6 +171,16 @@ def observe(session: Session, upto: int) -> Observed:
                 for name in DEF.findall(command):
                     _add(seen.symbols, name[0] or name[1])
             continue
+        reads, edits, written = pending
+        known = {*seen.opened, *seen.created, *seen.edited}
+        for path in map(session.relative, written):
+            _add(seen.edited if path in known else seen.created, path)
+        if _succeeded(step.text):
+            for path in map(session.relative, reads):
+                _add(seen.opened, path)
+            for path in map(session.relative, edits):
+                _add(seen.edited, path)
+        pending = ([], [], [])
         header = FILE_HEADER.search(step.text)
         if header:
             current = session.relative(header.group(1))
@@ -127,7 +194,7 @@ def observe(session: Session, upto: int) -> Observed:
                 if function != "<module>":
                     _add(seen.symbols, function)
         for name, message in ERROR_LINE.findall(step.text):
-            seen.errors.append((name, (message or "").strip()[:120]))
+            seen.errors.append((name, (message or "").split("</")[0].strip()[:120]))
     return _canonical(seen)
 
 
