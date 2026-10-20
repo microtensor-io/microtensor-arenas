@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from arenas.compress.trajectory import Observed
+from arenas.compress.trajectory import Observed, Session, next_action
 
 MAX_FILES = 12
 MAX_ERRORS = 5
@@ -66,19 +66,49 @@ def facts(seen: Observed) -> list[dict[str, Any]]:
 
 def _probe(question: str, answer: str, *extra: str) -> dict[str, Any]:
     answers = [normalise(answer), *(normalise(e) for e in extra if e and e != answer)]
-    return {"question": question, "answers": answers}
+    return {"type": "exact", "question": question, "answers": answers}
 
 
-def probes(seen: Observed) -> list[dict[str, Any]]:
+def _word(question: str, answer: str) -> dict[str, Any]:
+    return {"type": "word", "question": question, "answers": [answer]}
+
+
+def probes(seen: Observed, session: Session | None = None, cut: int = 0) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     if seen.edited:
         path = seen.edited[-1]
         found.append(
             _probe("Which file did the agent edit most recently?", path, path.rsplit("/", 1)[-1])
         )
-    if seen.opened:
-        path = seen.opened[0]
-        found.append(_probe("Which file did the agent open first?", path, path.rsplit("/", 1)[-1]))
+    found.append(
+        _word(
+            "Has the agent changed any existing file in the repository yet? Answer yes or no.",
+            "yes" if seen.edited else "no",
+        )
+    )
+    if seen.tests:
+        found.append(
+            _word(
+                "Did the agent's most recent test run pass or fail? Answer pass or fail.",
+                "pass" if seen.tests[-1] else "fail",
+            )
+        )
+    following = next_action(session, cut) if session is not None else None
+    if following is not None:
+        kind, path = following
+        found.append(
+            {
+                "type": "next_step",
+                "question": (
+                    "What will the agent most likely do next? Answer with one of read, edit, "
+                    "test, run, install or other, followed by the file it will touch, if any."
+                ),
+                "answers": {
+                    "kind": kind,
+                    "file": sorted({normalise(a) for a in (path, path.rsplit("/", 1)[-1]) if a}),
+                },
+            }
+        )
     if seen.created:
         path = seen.created[-1]
         found.append(_probe("Which file did the agent create?", path, path.rsplit("/", 1)[-1]))
