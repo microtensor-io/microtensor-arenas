@@ -8,6 +8,8 @@ from typing import Any
 
 FENCE = re.compile(r"```([a-zA-Z]*)\n(.*?)```", re.DOTALL)
 SHELLS = ("", "bash", "sh", "shell", "console")
+ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&", ";;", "(", ")"})
 FILE_HEADER = re.compile(r"\[File: (/[^\s\]]+) \(\d+ lines total\)\]")
 FRAME = re.compile(r'File "([^"]+)", line \d+, in ([A-Za-z_]\w*)')
 PYTEST_FRAME = re.compile(r"^([\w./-]+\.py):\d+: in ([A-Za-z_]\w*)", re.MULTILINE)
@@ -124,7 +126,7 @@ def parse(row: Mapping[str, Any]) -> Session:
     steps: list[Step] = []
     for raw in row.get("trajectory") or row.get("messages") or []:
         role = str(raw.get("role") or "")
-        text = str(raw.get("text") or raw.get("content") or "")
+        text = ANSI.sub("", str(raw.get("text") or raw.get("content") or ""))
         if role == "system" or not text:
             continue
         kind = "agent" if role in AGENT_ROLES else "tool"
@@ -150,6 +152,21 @@ def _paths(tokens: list[str]) -> list[str]:
     return [token for token in cleaned if PATHLIKE.match(token)]
 
 
+def _segments(text: str) -> list[list[str]]:
+    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    segments: list[list[str]] = [[]]
+    try:
+        for token in lexer:
+            if token in SEPARATORS:
+                segments.append([])
+            else:
+                segments[-1].append(token)
+    except ValueError:
+        return [segment.split() for segment in re.split(r"&&|\|\||;|\|", text)]
+    return segments
+
+
 def shell_targets(command: str) -> tuple[list[str], list[str], list[str]]:
     lines: list[str] = []
     for line in command.splitlines():
@@ -160,11 +177,7 @@ def shell_targets(command: str) -> tuple[list[str], list[str], list[str]]:
     reads: list[str] = []
     edits: list[str] = []
     created: list[str] = []
-    for segment in re.split(r"&&|\|\||;|\|", text):
-        try:
-            tokens = shlex.split(segment, posix=True)
-        except ValueError:
-            tokens = segment.split()
+    for tokens in _segments(text):
         if not tokens:
             continue
         verb = tokens[0]
