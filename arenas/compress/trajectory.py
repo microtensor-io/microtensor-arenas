@@ -6,7 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-FENCE = re.compile(r"```[a-zA-Z]*\n(.*?)```", re.DOTALL)
+FENCE = re.compile(r"```([a-zA-Z]*)\n(.*?)```", re.DOTALL)
+SHELLS = ("", "bash", "sh", "shell", "console")
 FILE_HEADER = re.compile(r"\[File: (/[^\s\]]+) \(\d+ lines total\)\]")
 FRAME = re.compile(r'File "([^"]+)", line \d+, in ([A-Za-z_]\w*)')
 ERROR_LINE = re.compile(
@@ -100,7 +101,10 @@ class Observed:
 
 def _command(text: str) -> str:
     blocks = FENCE.findall(text or "")
-    return blocks[-1].strip() if blocks else ""
+    shells = [body for language, body in blocks if language.lower() in SHELLS]
+    if shells:
+        return str(shells[0]).strip()
+    return str(blocks[-1][1]).strip() if blocks else ""
 
 
 def _repo(instance_id: str) -> str:
