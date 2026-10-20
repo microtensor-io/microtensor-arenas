@@ -1,0 +1,8 @@
+{
+  "type": "object",
+  "properties": {
+    "question": {"type": "string"},
+    "schema": {"type": "string"}
+  },
+  "required": ["question", "schema"]
+}

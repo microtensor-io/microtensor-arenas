@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "system": {"type": "string"},
+    "user": {"type": "string"}
+  },
+  "required": ["system", "user"],
+  "additionalProperties": false
+}

@@ -1,0 +1,91 @@
+id: sql_gen_s1
+title: "Databases: SQL generation"
+season: 1
+category: Text
+network: testnet
+task: sql_generation
+aliases: [text-to-sql, sql, nl2sql]
+timing:
+  epoch_blocks: 50400
+  commit_blocks: 7200
+  settle_margin: 300
+
+purpose:
+  summary: >-
+    Teams and apps ask questions of their own databases in plain language. This specialist turns
+    each question into one correct SQLite query on one GPU at a fraction of frontier cost.
+  input: The database schema as CREATE TABLE statements (system message) and the question (user message)
+  output: 'JSON {"sql": "..."}: one SQLite SELECT statement'
+
+slm:
+  bases:
+    - Qwen/Qwen2.5-Coder-7B-Instruct
+    - Qwen/Qwen2.5-Coder-1.5B-Instruct
+    - microsoft/Phi-4-mini-instruct
+  reference:
+    model: Qwen/Qwen2.5-Coder-7B-Instruct
+    revision: c03e6d358207e414f1eca0bb1891e29f1db0e242
+  dataset: null
+  prompt: "Schema:\n{schema}\n\nQuestion: {question}\n\nWrite one SQLite query that answers the question.\nSQL:"
+  stop: ["\n\n", ";"]
+  grader: sqlite_execution
+  primary_metric: execution_accuracy
+  success_rule: result_matches_on_every_state
+  twin_rule: rename_and_revalue
+  evaluation:
+    - name: Item pass
+      formula: "pass(i) = 1 if the query's result matches the reference query's result on every database state of the item, otherwise 0"
+
+envelope:
+  group: mt-3
+  overrides:
+    ttft_p95_ms: 2000
+    max_output_tokens: 256
+    max_input_tokens: 32512
+
+harness:
+  tools: [schema_lookup, query_execution]
+  request_timeout_s: 120
+  code_limit_mb: 2
+  sandbox: "gVisor, 4 CPU, 8 GB, no network except the model, router, tools and relay"
+  max_steps: 32
+  max_total_tokens: 200000
+
+router:
+  max_parameters: 100000000
+  max_input_tokens: 8192
+  latency_gate_ms: 100
+  reference: null
+
+escalation:
+  spend_cap_multiple: 1.5
+  frontier:
+    - model: gpt-5
+      provider: openai
+      version: gpt-5-2026-06-01
+      usd_in_per_mtok: 1.25
+      usd_out_per_mtok: 10.0
+    - model: claude-sonnet-5-5
+      provider: anthropic
+      version: claude-sonnet-5-5-20260601
+      usd_in_per_mtok: 3.0
+      usd_out_per_mtok: 15.0
+
+floors: [0.8, 0.9, 0.95, 0.99]
+item_counts:
+  slm: 400
+  harness: 400
+  router: 250
+  escalation: 120
+  system: 400
+r_class: {1b: 0.02, 3b: 0.05, 8b: 0.10}
+fee:
+  tao: 0.005
+  coldkey: 5G9ca9pgbCa63aJWbDAF3dNLhUtbFDYf1fnPMnByf9uyUNFh
+chat:
+  fields: {question: user, schema: system}
+  answer: sql
+  classifier_text: user
+  hint: Send the schema (CREATE TABLE statements) as the system message and the question as the user message.
+serving:
+  rate: 1000

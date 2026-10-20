@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "summary": {"type": "string"},
+    "files_touched": {"type": "array", "items": {"type": "string"}},
+    "open_tasks": {"type": "array", "items": {"type": "string"}},
+    "errors": {"type": "array", "items": {"type": "string"}},
+    "decisions": {"type": "array", "items": {"type": "string"}}
+  },
+  "required": ["summary", "files_touched", "open_tasks", "errors", "decisions"],
+  "additionalProperties": false
+}

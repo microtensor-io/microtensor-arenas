@@ -1,0 +1,78 @@
+version: 1
+season: 1
+docs: https://microtensor.cloud/docs/certified-inference/system/envelope-groups
+violation_share: 0.01
+min_bits: 4
+rules:
+  - Each arena uses the lowest group its task fits. Most arenas are mt-1 or mt-2; mt-3 is for tasks that truly need long inputs or long answers.
+  - An arena can make a limit stricter but never looser. If it needs more, it moves up a group.
+  - Nothing below 4 bit precision, because hallucinations jump at 3 bit and 2 bit.
+  - Groups are frozen for the whole season. Changes ship as a new version before the next season.
+  - A system that goes over any limit on more than 1% of items fails the envelope and scores zero for that epoch.
+  - Systems are also tested on the groups below their arena's. Passing a lower group gives the edge ready flag and the edge bonus in the SLM score.
+measurement:
+  - mt-1 and mt-2 run llama.cpp with GGUF weights on CPU, with a fixed thread count and a cgroups memory cap. mt-1 runs on an ARM instance with 4 threads and 2 GB, mt-2 on x86 with 8 threads and 4 GB.
+  - mt-3 runs vLLM on the reference 24 GB GPU.
+  - Speed is the p95 across the full hidden eval set at concurrency 1.
+  - First token time includes reading the whole input.
+  - Memory is the peak during the run, including the KV cache.
+  - Once a season, the CPU numbers are spot checked against a few real phones.
+groups:
+  mt-1:
+    name: Phone
+    summary: Mid to high end phones running offline.
+    fits: classification, intent, tagging, titling and spotting personal data in short text
+    runtime: llama.cpp
+    device: cpu
+    formats: [gguf]
+    precision: [Q4_K_M, Q5_K_S, Q5_K_M, Q6_K, Q8_0]
+    parameters: {max: 1600000000}
+    memory_gb: 2
+    max_input_tokens: 1024
+    max_output_tokens: 256
+    ttft_p95_ms: 4000
+    min_tokens_per_s: 20
+    reference: {arch: arm64, threads: 4, memory_cap_gb: 2, machine: GCP c4a-standard-4}
+    placeholder: true
+  mt-2:
+    name: CPU
+    summary: Ordinary laptops, office desktops and small edge boxes with no GPU.
+    fits: extraction, SQL, short document Q&A and redaction
+    runtime: llama.cpp
+    device: cpu
+    formats: [gguf]
+    precision: [Q4_K_M, Q5_K_S, Q5_K_M, Q6_K, Q8_0]
+    parameters: {max: 4000000000}
+    memory_gb: 4
+    max_input_tokens: 2048
+    max_output_tokens: 512
+    ttft_p95_ms: 8000
+    min_tokens_per_s: 10
+    reference: {arch: x86_64, threads: 8, memory_cap_gb: 4, machine: GCP n2d-standard-8}
+    placeholder: true
+  mt-3:
+    name: Small GPU
+    summary: Only for tasks that need long inputs or long answers.
+    fits: context compression, contract review and long summaries
+    runtime: vLLM
+    device: gpu
+    formats: [safetensors]
+    precision: [bf16, fp16, awq, gptq]
+    parameters: {min: 1000000000, max: 8000000000}
+    memory_gb: 24
+    max_input_tokens: 32768
+    max_output_tokens: 4096
+    ttft_p95_ms: 4000
+    tpot_p95_ms: 60
+    reference: {gpus: 1, memory_gb: 24, machine: named after the benchmark}
+    serving_class: gpu_24gb
+    placeholder: true
+  mt-4:
+    name: Large
+    summary: Reserved for vision and harder code later, with limits set when it is needed.
+    runtime: vLLM
+    device: gpu
+    formats: [safetensors]
+    parameters: {min: 8000000000, max: 32000000000}
+    memory_gb: 48
+    reserved: true

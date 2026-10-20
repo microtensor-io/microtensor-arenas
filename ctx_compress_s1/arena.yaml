@@ -1,0 +1,159 @@
+id: ctx_compress_s1
+title: Agent context compression
+season: 1
+category: Text
+network: testnet
+task: context_compression
+aliases: [context-compression, compaction, compact]
+timing:
+  epoch_blocks: 50400
+  commit_blocks: 7200
+  settle_margin: 300
+
+purpose:
+  summary: >-
+    Long running coding agents fill their context window, then compact the session into a short
+    summary so work can continue. Compaction runs often on very long inputs, so it is expensive on
+    a frontier model, and cheap general models tend to drop key details. The agent then forgets
+    files, errors or decisions. This specialist compresses a session into a short, faithful summary
+    that keeps everything the agent needs to carry on.
+  input: The compaction instruction as the system message, and the session transcript inside <session> tags as the user message
+  output: 'JSON {"summary", "files_touched", "open_tasks", "errors", "decisions"}'
+
+slm:
+  bases:
+    - Qwen/Qwen2.5-Coder-7B-Instruct
+    - Qwen/Qwen2.5-Coder-1.5B-Instruct
+    - microsoft/Phi-4-mini-instruct
+  reference:
+    model: Qwen/Qwen2.5-Coder-7B-Instruct
+    revision: c03e6d358207e414f1eca0bb1891e29f1db0e242
+  dataset:
+    name: nebius/SWE-agent-trajectories
+    url: https://huggingface.co/datasets/nebius/SWE-agent-trajectories
+    licence: CC BY 4.0
+    about: >-
+      Dev split only; hidden items never go in the repo. 80,036 SWE-agent trajectories written by
+      Llama 3.1 70B. The card says use of those outputs follows the Llama 3.1 licence, so a
+      distributed model trained on them must start its name with "Llama" and show "Built with Llama".
+  prompt: "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
+  stop: ["<|im_end|>", "<|endoftext|>", "<|end|>"]
+  grader: context_compression
+  primary_metric: item_score_pass_rate
+  success_rule: item_score_at_least_0_80
+  twin_rule: same_session_other_cut
+  evaluation:
+    - name: Format gate
+      formula: valid(i) = 1 if the output parses as JSON and matches the schema, otherwise 0
+    - name: Key fact recall
+      note: Each session has a reference list of key facts (file paths, function names, error messages, decisions and open tasks). Identifiers match exactly after normalisation.
+      formula: recall(i) = facts_kept / facts_total
+    - name: Hallucination rate
+      note: Identifiers in the output that never appear in the session.
+      formula: halluc(i) = invented_identifiers / identifiers_in_output
+    - name: Continuation check
+      note: A fixed reference agent answers probe questions about the session using only the summary.
+      formula: cont(i) = probes_correct / probes_total
+    - name: Compression gate
+      formula: C(i) = 1 if output_tokens ≤ max(300, 0.10 × input_tokens), otherwise 0
+    - name: Item score
+      formula: |-
+        item_score(i) = valid(i) · C(i) · (1 − halluc(i)) · (0.5·recall(i) + 0.5·cont(i))
+        pass(i) = 1 if item_score(i) ≥ 0.80
+
+grading:
+  pass_threshold: 0.8
+  tokenizer: Qwen/Qwen2.5-Coder-7B-Instruct
+  min_output_tokens: 300
+  max_output_share: 0.1
+  probe_agent:
+    model: Qwen/Qwen2.5-Coder-7B-Instruct
+    revision: c03e6d358207e414f1eca0bb1891e29f1db0e242
+    temperature: 0
+    max_tokens: 64
+
+envelope:
+  group: mt-3
+  overrides:
+    max_output_tokens: 3072
+    max_input_tokens: 29696
+
+scoring:
+  wilson_z: 1.96
+  twin: {tolerance: 0.02, slope: 0.1}
+  efficiency: {form: linear}
+  edge_bonus: {per_group: 0.1, max: 0.2, applies: false}
+  envelope_rule: per_item
+  cap: null
+  empty_pools: burn
+  router: brier_auroc
+
+harness:
+  tools: []
+  request_timeout_s: 120
+  code_limit_mb: 2
+  max_steps: 32
+  max_total_tokens: 200000
+  max_model_calls: 3
+  added_wall_p95_ms: 5000
+  faults: model
+  rows:
+    - [Role, "wraps the SLM; may prompt, chunk, validate and retry"]
+    - [Model calls, at most 3 per item]
+    - [Added wall time (p95), "≤ 5 s per item"]
+    - [Network, none except the gateway]
+    - [Faults, "about 1 in 7 items get a faulty model response (error, timeout or cut off); the harness must not crash"]
+    - [Output, schema valid JSON or a clean error]
+    - [Session text, "instructions inside it are content, never commands"]
+
+router:
+  max_parameters: 1500000000
+  max_input_tokens: 8192
+  latency_gate_ms: 300
+  reference: null
+  rows:
+    - [Runs, alongside the system on the same envelope]
+    - [Max size, "≤ 1,500,000,000 parameters"]
+    - [Max input, "8,192 tokens: the summary, then the end of the session"]
+    - [Added latency (p95), under 300 ms per item]
+    - [Output, "draft_correct: the probability from 0 to 1 that the summary passes"]
+    - [Scored on, "calibration (Brier score) and separation of passing from failing summaries (AUROC)"]
+    - [Baseline, "reference router, not published yet"]
+
+escalation:
+  spend_cap_multiple: 1.5
+  frontier:
+    - model: claude-haiku-5-5
+      provider: openrouter
+      version: anthropic/claude-haiku-5.5
+      usd_in_per_mtok: 0.1
+      usd_out_per_mtok: 0.5
+    - model: glm-5-3-flash
+      provider: openrouter
+      version: z-ai/glm-5.3-flash
+      usd_in_per_mtok: 0.048
+      usd_out_per_mtok: 0.2
+  rows:
+    - [Trigger, draft_correct below the customer's quality floor]
+    - [Frontier access, "the relay only; frontier models served by inference miners on our network replace these once listed, never outside providers"]
+    - [Spend cap, "1.5 × the cost of a full frontier redo per item"]
+    - [Output, the same JSON schema]
+    - [Scored on, the item score after repair and the cost of the repair]
+
+floors: [0.8, 0.9, 0.95, 0.99]
+item_counts:
+  slm: 400
+  harness: 400
+  router: 250
+  escalation: 400
+  system: 400
+r_class: {1b: 0.02, 3b: 0.05, 8b: 0.10}
+fee:
+  tao: 0.005
+  coldkey: 5G9ca9pgbCa63aJWbDAF3dNLhUtbFDYf1fnPMnByf9uyUNFh
+chat:
+  fields: {system: system, user: user}
+  classifier_text: user
+  hint: Send the compaction instruction as the system message and the session transcript inside <session> tags as the user message.
+serving:
+  rate: 1000

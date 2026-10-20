@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "microtensor-arenas"
+version = "0.2.0"
+description = "Microtensor arena definitions, the shared envelope groups and base list, and dev item builders"
+requires-python = ">=3.10"
+dependencies = ["pyyaml>=6.0"]
+
+[project.optional-dependencies]
+compress = ["huggingface-hub>=0.24", "pyarrow>=15", "tokenizers>=0.19"]
+
+[project.scripts]
+mta = "arenas.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["arenas*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

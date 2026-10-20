@@ -1,0 +1,7 @@
+{
+  "type": "object",
+  "properties": {
+    "sql": {"type": "string"}
+  },
+  "required": ["sql"]
+}
