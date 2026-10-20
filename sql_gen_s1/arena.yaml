@@ -37,7 +37,7 @@ slm:
       formula: "pass(i) = 1 if the query's result matches the reference query's result on every database state of the item, otherwise 0"
 
 envelope:
-  group: mt-3
+  group: mt-5
   overrides:
     ttft_p95_ms: 2000
     max_output_tokens: 256

@@ -78,7 +78,7 @@ grading:
     max_tokens: 64
 
 envelope:
-  group: mt-3
+  group: mt-5
   overrides:
     max_output_tokens: 3072
     max_input_tokens: 29696
