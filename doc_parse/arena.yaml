@@ -19,6 +19,11 @@ purpose:
     hidden ground truth.
   input: The parsing instruction as the system message; one page image from a PDF render or a scan, with the page number and the document type, as the user message
   output: Markdown. Tables as HTML so merged cells survive, equations as LaTeX, charts as a Markdown data table, flow diagrams as Mermaid; headers, footers and page numbers kept as HTML comments
+  brief:
+    summary: >-
+      Businesses feed documents into AI systems that can only use what they can read. This specialist turns each page into clean Markdown with real tables, LaTeX equations and chart data, checked against hidden ground truth.
+    input: One page image, up to 2,048 px, with its page number and document type
+    output: Markdown for the page, with HTML tables and LaTeX equations
 
 slm:
   model_class: AutoModelForImageTextToText
@@ -43,6 +48,7 @@ slm:
       (CDLA Permissive 1.0), and VRDU, CORD v2 and FATURA (CC BY 4.0) for forms, receipts and
       invoices. FinTabNet's licence is still to confirm. OmniDocBench is research only: cite it,
       never train or grade on it.
+    note: ODC-BY; the card calls it research and educational data, to be confirmed with Ai2.
   prompt: "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>{user}<|im_end|>\n<|im_start|>assistant\n"
   stop: ["<|im_end|>", "<|endoftext|>", "<|end|>"]
   grader: page_parsing

@@ -18,6 +18,11 @@ purpose:
     that keeps everything the agent needs to carry on.
   input: The compaction instruction as the system message, and the session transcript inside <session> tags as the user message
   output: 'JSON {"summary", "files_touched", "open_tasks", "errors", "decisions"}'
+  brief:
+    summary: >-
+      Long running coding agents fill their context window and must compact the session to keep going. This specialist writes a short, faithful summary that keeps every file, error and decision the agent needs to carry on.
+    input: Session transcript, up to 29,696 tokens
+    output: JSON summary, at most 10% of the input
 
 slm:
   bases:
@@ -35,6 +40,7 @@ slm:
       Dev split only; hidden items never go in the repo. 80,036 SWE-agent trajectories written by
       Llama 3.1 70B. The card says use of those outputs follows the Llama 3.1 licence, so a
       distributed model trained on them must start its name with "Llama" and show "Built with Llama".
+    note: Outputs follow the Llama 3.1 licence, so a distributed fine tune must carry the Llama name.
   prompt: "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
   stop: ["<|im_end|>", "<|endoftext|>", "<|end|>"]
   grader: context_compression
