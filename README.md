@@ -7,6 +7,7 @@ Every arena on the network, as the files the definitions are built from. The pag
 | Arena | Task | Envelope | Network |
 |---|---|---|---|
 | [ctx_compress](ctx_compress/ARENA.md) | Agent context compression | mt-5 | testnet |
+| [doc_extract](doc_extract/ARENA.md) | Documents: field extraction | mt-5 | testnet |
 | [sql_gen](sql_gen/ARENA.md) | Databases: SQL generation | mt-5 | testnet |
 
 Each folder holds:

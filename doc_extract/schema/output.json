@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "properties": {
+    "fields": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["string", "number", "array", "null"],
+        "items": {"type": ["string", "number"]}
+      }
+    },
+    "line_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": {"type": ["string", "number", "null"]}
+      }
+    }
+  },
+  "required": ["fields", "line_items"],
+  "additionalProperties": false
+}
