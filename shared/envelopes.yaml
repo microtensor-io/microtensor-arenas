@@ -1,4 +1,4 @@
-version: 4
+version: 5
 docs: https://microtensor.cloud/docs/certified-inference/system/envelope-groups
 violation_share: 0.01
 min_bits: 4
@@ -8,7 +8,7 @@ rules:
   - An arena can make a limit stricter but never looser. If it needs more, it moves up a class.
   - At most four classes are open at a time, because every open class splits the same competition and needs its own reference hardware. mt-2, mt-3 and mt-5 are open; mt-1 and mt-4 open once they are benchmarked.
   - Nothing below 4 bit precision, because hallucinations jump at 3 bit and 2 bit.
-  - Image input has its own limits per class: the largest page image accepted (long side and total pixels), the pages per call and the time allowed per page. Arenas tighten them like any other limit. mt-1 is text only.
+  - Image input has its own limits per class, the largest page image accepted (long side and total pixels), the pages per call and the time allowed per page. Arenas tighten them like any other limit. mt-1 is text only.
   - Classes change only through a new published version, announced before it applies.
   - A system that goes over any limit on more than 1% of items fails the envelope and scores zero for that epoch.
   - Systems are also tested on the open classes below their arena's. Passing a lower class gives the edge ready flag and the edge bonus in the SLM score.
