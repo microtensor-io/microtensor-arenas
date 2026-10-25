@@ -168,3 +168,6 @@ chat:
   hint: Send the compaction instruction as the system message and the session transcript inside <session> tags as the user message.
 serving:
   rate: 1000
+  unit: request
+  usd_in_per_mtok: 0.05
+  usd_out_per_mtok: 0.2
