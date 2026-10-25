@@ -176,3 +176,6 @@ chat:
   hint: Send the parsing instruction as the system message, the page image as the image, and the page number and document type as the user message.
 serving:
   rate: 500
+  unit: page
+  usd_in_per_mtok: 0.1
+  usd_out_per_mtok: 0.55
