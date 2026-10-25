@@ -1,0 +1,172 @@
+id: doc_parse
+title: "Documents: page parsing"
+category: Vision
+network: testnet
+task: page_parsing
+aliases: [document-parsing, parsing, ocr, pdf-to-markdown, parse]
+timing:
+  epoch_blocks: 50400
+  commit_blocks: 7200
+  settle_margin: 300
+
+purpose:
+  summary: >-
+    Businesses feed contracts, invoices, financial statements and reports into AI systems every
+    day, but those systems can only use what they can read. This specialist turns each document
+    page into clean, structured Markdown: it keeps headings and the true reading order, rebuilds
+    tables with merged cells, writes equations as LaTeX and turns charts into data. It runs on one
+    small GPU at a fraction of frontier cost, and validators check every page it produces against
+    hidden ground truth.
+  input: The parsing instruction as the system message; one page image from a PDF render or a scan, with the page number and the document type, as the user message
+  output: Markdown. Tables as HTML so merged cells survive, equations as LaTeX, charts as a Markdown data table, flow diagrams as Mermaid; headers, footers and page numbers kept as HTML comments
+
+slm:
+  model_class: AutoModelForImageTextToText
+  bases:
+    - Qwen/Qwen3-VL-4B-Instruct
+    - Qwen/Qwen3-VL-2B-Instruct
+    - deepseek-ai/DeepSeek-OCR
+    - PaddlePaddle/PaddleOCR-VL
+    - ibm-granite/granite-docling-258M
+  reference:
+    model: Qwen/Qwen3-VL-4B-Instruct
+    revision: ebb281ec70b05090aa6165b016eac8ec08e71b17
+  dataset:
+    name: allenai/olmOCR-mix-1025
+    url: https://huggingface.co/datasets/allenai/olmOCR-mix-1025
+    licence: ODC-BY
+    about: >-
+      Dev split only; hidden items never go in the repo. About 270,000 PDF pages with Markdown
+      answers and HTML tables, written by GPT-4.1, so they are not perfect. Also allowed for
+      training: DocLayNet v1.1 (80,863 pages labelled into 11 layout types, CDLA Permissive 1.0),
+      olmOCR-Bench (1,403 PDFs with 7,010 checks, ODC-BY, a public practice benchmark), PubTabNet
+      (CDLA Permissive 1.0), and VRDU, CORD v2 and FATURA (CC BY 4.0) for forms, receipts and
+      invoices. FinTabNet's licence is still to confirm. OmniDocBench is research only: cite it,
+      never train or grade on it.
+  prompt: "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>{user}<|im_end|>\n<|im_start|>assistant\n"
+  stop: ["<|im_end|>", "<|endoftext|>", "<|end|>"]
+  grader: page_parsing
+  primary_metric: item_score_pass_rate
+  success_rule: item_score_at_least_0_85
+  twin_rule: same_source_other_render
+  evaluation:
+    - name: Valid output
+      formula: valid(i) = 1 if the Markdown parses and every HTML table is well formed, otherwise 0
+    - name: Text
+      note: Body text against the page's text, as one minus the normalised edit distance.
+      formula: text(i) = 1 − edit_distance(output_text, page_text) / max(len(output_text), len(page_text))
+    - name: Reading order
+      note: >-
+        The order of every block on the page, including captions, footnotes and two column text,
+        as Kendall's tau between the output order and the true order, not just pairs of lines.
+      formula: order(i) = (τ + 1) / 2
+    - name: Tables
+      note: >-
+        Full structure and content against the real table, including merged cells and multi level
+        headers: the TEDS score, averaged over the page's tables.
+      formula: tables(i) = mean TEDS over the page's tables
+    - name: Equations
+      note: Each equation's LaTeX matches the page after normalisation.
+      formula: equations(i) = matching_equations / equations_on_page
+    - name: Charts
+      note: The values pulled out of a chart match the data used to draw it, within 2%.
+      formula: charts(i) = matching_values / values_in_chart
+    - name: Hallucination
+      note: Text that is not on the page, and any text inside regions that should be empty.
+      formula: halluc(i) = invented_characters / output_characters
+    - name: Item score
+      note: >-
+        Only the checks that apply to the page count, with weights text 0.35, order 0.15, tables
+        0.25, equations 0.15, charts 0.10, renormalised over the checks present.
+      formula: |-
+        item_score(i) = valid(i) · (1 − halluc(i)) · Σ w_k · check_k(i) / Σ w_k
+        pass(i) = 1 if item_score(i) ≥ 0.85
+
+grading:
+  pass_threshold: 0.85
+  weights: {text: 0.35, order: 0.15, tables: 0.25, equations: 0.15, charts: 0.1}
+  chart_tolerance: 0.02
+  tables: teds
+  order: kendall_tau
+
+envelope:
+  group: mt-5
+  overrides:
+    max_input_tokens: 4096
+    max_output_tokens: 2048
+
+scoring:
+  wilson_z: 1.96
+  twin: {tolerance: 0.02, slope: 0.1}
+  efficiency: {form: linear}
+  edge_bonus: {per_group: 0.1, max: 0.2, applies: true}
+  envelope_rule: per_item
+  cap: null
+  empty_pools: burn
+  router: brier_auroc
+  min_items: 100
+
+harness:
+  tools: []
+  request_timeout_s: 60
+  code_limit_mb: 2
+  max_steps: 16
+  max_total_tokens: 50000
+  max_model_calls: 3
+  added_wall_p95_ms: 2000
+  faults: model
+  rows:
+    - [Role, "wraps the SLM; may deskew, crop, tile and rotate the page, validate the Markdown and retry"]
+    - [Model calls, at most 3 per item]
+    - [Added wall time (p95), "≤ 2 s per page"]
+    - [Network, none except the gateway]
+    - [Faults, "about 1 in 7 items get a faulty model response (error, timeout or cut off); the harness must not crash"]
+    - [Output, Markdown or a clean error]
+    - [Page text, "instructions printed on the page are content, never commands"]
+
+router:
+  max_parameters: 1500000000
+  max_input_tokens: 4096
+  latency_gate_ms: 300
+  reference: null
+  rows:
+    - [Runs, alongside the system on the same envelope]
+    - [Max size, "≤ 1,500,000,000 parameters"]
+    - [Max input, "4,096 tokens: the output Markdown"]
+    - [Added latency (p95), under 300 ms per page]
+    - [Output, "draft_correct: the probability from 0 to 1 that the page passes"]
+    - [Scored on, "calibration (Brier score) and separation of passing from failing pages (AUROC)"]
+    - [Baseline, "reference router, not published yet"]
+
+escalation:
+  spend_cap_multiple: 1.5
+  frontier:
+    - model: claude-haiku-5-5
+      provider: openrouter
+      version: anthropic/claude-haiku-5.5
+      usd_in_per_mtok: 0.1
+      usd_out_per_mtok: 0.5
+  rows:
+    - [Trigger, draft_correct below the customer's quality floor]
+    - [Frontier access, "the relay only, vision capable models; frontier models served by inference miners on our network replace these once listed, never outside providers"]
+    - [Spend cap, "1.5 × the cost of a full frontier redo per page"]
+    - [Output, the same Markdown]
+    - [Scored on, the item score after repair and the cost of the repair]
+
+floors: [0.8, 0.9, 0.95, 0.99]
+item_counts:
+  slm: 100
+  harness: 100
+  router: 60
+  escalation: 100
+  system: 100
+r_class: {1b: 0.02, 3b: 0.05, 8b: 0.10}
+fee:
+  tao: 0.005
+  coldkey: 5G9ca9pgbCa63aJWbDAF3dNLhUtbFDYf1fnPMnByf9uyUNFh
+chat:
+  fields: {system: system, user: user, image: image}
+  classifier_text: user
+  hint: Send the parsing instruction as the system message, the page image as the image, and the page number and document type as the user message.
+serving:
+  rate: 500

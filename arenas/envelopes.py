@@ -10,7 +10,8 @@ SHARED = Path(__file__).resolve().parent.parent / "shared"
 MAXIMA = ("memory_gb", "max_input_tokens", "max_output_tokens", "ttft_p95_ms", "tpot_p95_ms")
 MINIMA = ("min_tokens_per_s",)
 SUBSETS = ("precision", "formats")
-LIMITS = (*MAXIMA, *MINIMA, *SUBSETS, "parameters")
+IMAGE = ("max_long_side_px", "max_pixels", "pages_per_call", "page_time_p95_ms")
+LIMITS = (*MAXIMA, *MINIMA, *SUBSETS, "parameters", "image")
 
 
 @cache
@@ -40,6 +41,12 @@ def _tighter(name: str, key: str, value: Any, base: Any) -> None:
         raise ValueError(f"{key} {value} is looser than {name}'s {base}")
     if key in SUBSETS and not set(value) <= set(base):
         raise ValueError(f"{key} {value} is not within {name}'s {base}")
+    if key == "image":
+        for sub, amount in value.items():
+            if sub not in IMAGE:
+                raise ValueError(f"{sub} is not an image limit")
+            if amount > base.get(sub, 0):
+                raise ValueError(f"image {sub} {amount} is looser than {name}'s {base.get(sub)}")
     if key == "parameters":
         if value.get("max", 0) > base.get("max", 0):
             raise ValueError(f"parameters max {value['max']} is looser than {name}'s {base['max']}")
@@ -56,7 +63,7 @@ def resolve(envelope: dict[str, Any]) -> dict[str, Any]:
         if key not in LIMITS:
             raise ValueError(f"{key} is not an envelope limit")
         _tighter(name, key, value, base.get(key))
-        limits[key] = {**base[key], **value} if key == "parameters" else value
+        limits[key] = {**base[key], **value} if key in ("parameters", "image") else value
     shared = document("envelopes")
     return {
         "group": name,
@@ -88,6 +95,8 @@ def budgets(resolved: dict[str, Any]) -> dict[str, Any]:
         found["tpot_ms"] = limits["tpot_p95_ms"]
     if "min_tokens_per_s" in limits:
         found["min_tokens_per_s"] = limits["min_tokens_per_s"]
+    if "image" in limits:
+        found["image"] = dict(limits["image"])
     if resolved["device"] == "gpu":
         found["vram_gb"] = limits["memory_gb"]
         found["vram_bytes"] = memory

@@ -115,7 +115,7 @@ def build(
         "modality": arena["category"].lower(),
         "task": arena["task"],
         "aliases": arena.get("aliases", []),
-        "slm_model_class": "AutoModelForCausalLM",
+        "slm_model_class": slm.get("model_class", "AutoModelForCausalLM"),
         "allowed_licenses": sorted({b["licence"] for b in slm["bases"]}),
         "allowed_bases": [b["model"] for b in slm["bases"]],
         "allowed_formats": envelope["limits"]["precision"],

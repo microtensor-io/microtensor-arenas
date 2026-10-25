@@ -1,5 +1,5 @@
-version: 2
-checked: 2026-10-19
+version: 3
+checked: 2026-10-25
 bases:
   - model: Qwen/Qwen2.5-0.5B-Instruct
     revision: 7ae557604adf67be50417f59c2c2f167def9a775
@@ -68,6 +68,51 @@ bases:
     parameters: 3836021760
     gated: false
     groups: [mt-3, mt-4, mt-5]
+  - model: ibm-granite/granite-docling-258M
+    revision: 982fe3b40f2fa73c365bdb1bcacf6c81b7184bfe
+    licence: apache-2.0
+    licence_name: Apache 2.0
+    licence_url: https://www.apache.org/licenses/LICENSE-2.0
+    parameters: 257517120
+    gated: false
+    vision: true
+    groups: [mt-2, mt-3, mt-4, mt-5]
+  - model: PaddlePaddle/PaddleOCR-VL
+    revision: 7fa00a8c55b735ba51ba49a9058f3f9c57a99a11
+    licence: apache-2.0
+    licence_name: Apache 2.0
+    licence_url: https://www.apache.org/licenses/LICENSE-2.0
+    parameters: 958588736
+    gated: false
+    vision: true
+    groups: [mt-2, mt-3, mt-4, mt-5]
+  - model: Qwen/Qwen3-VL-2B-Instruct
+    revision: 89644892e4d85e24eaac8bacfd4f463576704203
+    licence: apache-2.0
+    licence_name: Apache 2.0
+    licence_url: https://www.apache.org/licenses/LICENSE-2.0
+    parameters: 2127532032
+    gated: false
+    vision: true
+    groups: [mt-3, mt-4, mt-5]
+  - model: deepseek-ai/DeepSeek-OCR
+    revision: 9f30c71f441d010e5429c532364a86705536c53a
+    licence: mit
+    licence_name: MIT
+    licence_url: https://huggingface.co/deepseek-ai/DeepSeek-OCR/blob/main/LICENSE
+    parameters: 3336106240
+    gated: false
+    vision: true
+    groups: [mt-3, mt-4, mt-5]
+  - model: Qwen/Qwen3-VL-4B-Instruct
+    revision: ebb281ec70b05090aa6165b016eac8ec08e71b17
+    licence: apache-2.0
+    licence_name: Apache 2.0
+    licence_url: https://www.apache.org/licenses/LICENSE-2.0
+    parameters: 4437815808
+    gated: false
+    vision: true
+    groups: [mt-4, mt-5]
 excluded:
   - model: Qwen/Qwen2.5-3B-Instruct
     licence: qwen-research
@@ -77,3 +122,27 @@ excluded:
     licence: qwen-research
     licence_url: https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct/blob/main/LICENSE
     reason: Non commercial use only (section 2a); commercial use needs a separate licence from Alibaba.
+  - model: Qwen/Qwen2.5-VL-3B-Instruct
+    licence: qwen-research
+    licence_url: https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/blob/main/LICENSE
+    reason: Non commercial use only; commercial use needs a separate licence from Alibaba.
+  - model: nanonets/Nanonets-OCR2-3B
+    licence: qwen-research
+    licence_url: https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/blob/main/LICENSE
+    reason: Built on Qwen2.5-VL-3B, so it carries that model's non commercial licence.
+  - model: opendatalab/MinerU2.5-2509-1.2B
+    licence: agpl-3.0
+    licence_url: https://www.gnu.org/licenses/agpl-3.0.html
+    reason: AGPL 3.0; a fine tune would have to be released under AGPL, which the network's artifact terms do not allow.
+  - model: allenai/olmOCR-2-7B-1025
+    licence: apache-2.0
+    licence_url: https://www.apache.org/licenses/LICENSE-2.0
+    reason: 8.29B parameters, above the 8B cap of mt-5; it fits once mt-6 opens.
+  - model: Qwen/Qwen2.5-VL-7B-Instruct
+    licence: apache-2.0
+    licence_url: https://www.apache.org/licenses/LICENSE-2.0
+    reason: 8.29B parameters, above the 8B cap of mt-5; it fits once mt-6 opens.
+  - model: Qwen/Qwen3-VL-8B-Instruct
+    licence: apache-2.0
+    licence_url: https://www.apache.org/licenses/LICENSE-2.0
+    reason: 8.77B parameters, above the 8B cap of mt-5; it fits once mt-6 opens.

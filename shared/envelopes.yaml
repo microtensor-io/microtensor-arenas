@@ -1,13 +1,14 @@
-version: 3
+version: 4
 docs: https://microtensor.cloud/docs/certified-inference/system/envelope-groups
 violation_share: 0.01
 min_bits: 4
 max_open: 4
 rules:
-  - Each arena uses the lowest class its task fits. Most arenas belong in mt-2 or mt-3; mt-5 is for tasks that truly need long inputs or long answers.
+  - Each arena uses the lowest class its task fits. Most arenas belong in mt-2 or mt-3; mt-5 is for tasks that truly need long inputs, long answers or page images.
   - An arena can make a limit stricter but never looser. If it needs more, it moves up a class.
   - At most four classes are open at a time, because every open class splits the same competition and needs its own reference hardware. mt-2, mt-3 and mt-5 are open; mt-1 and mt-4 open once they are benchmarked.
   - Nothing below 4 bit precision, because hallucinations jump at 3 bit and 2 bit.
+  - Image input has its own limits per class: the largest page image accepted (long side and total pixels), the pages per call and the time allowed per page. Arenas tighten them like any other limit. mt-1 is text only.
   - Classes change only through a new published version, announced before it applies.
   - A system that goes over any limit on more than 1% of items fails the envelope and scores zero for that epoch.
   - Systems are also tested on the open classes below their arena's. Passing a lower class gives the edge ready flag and the edge bonus in the SLM score.
@@ -16,8 +17,9 @@ measurement:
   - mt-4 runs llama.cpp with GGUF weights on a GPU, with the model's footprint held to 8 GB. Phone and laptop NPUs from Qualcomm, Intel and AMD all differ, so validators cannot measure each one fairly and none is used.
   - mt-5 runs vLLM on the reference 24 GB GPU.
   - Speed is the p95 across the full hidden eval set at concurrency 1.
-  - First token time includes reading the whole input.
-  - Memory is the peak during the run, including the KV cache.
+  - First token time includes reading the whole input, and the whole page image when there is one.
+  - Page time is the wall time from the image arriving to the last output token, p95 across the hidden set at concurrency 1. Image limits are estimates until the first page parsing benchmark.
+  - Memory is the peak during the run, including the KV cache and the vision encoder.
   - The CPU numbers are spot checked against a few real phones before a class opens and after any new version.
 groups:
   mt-1:
@@ -55,6 +57,7 @@ groups:
     max_output_tokens: 256
     ttft_p95_ms: 4000
     min_tokens_per_s: 20
+    image: {max_long_side_px: 1024, max_pixels: 786432, pages_per_call: 1, page_time_p95_ms: 60000}
     reference: {arch: arm64, threads: 4, memory_cap_gb: 2, machine: GCP c4a-standard-4}
     placeholder: true
   mt-3:
@@ -73,6 +76,7 @@ groups:
     max_output_tokens: 512
     ttft_p95_ms: 8000
     min_tokens_per_s: 10
+    image: {max_long_side_px: 1280, max_pixels: 1228800, pages_per_call: 1, page_time_p95_ms: 30000}
     reference: {arch: x86_64, threads: 8, memory_cap_gb: 4, machine: GCP n2d-standard-8}
     placeholder: true
   mt-4:
@@ -92,24 +96,26 @@ groups:
     max_output_tokens: 1024
     ttft_p95_ms: 6000
     min_tokens_per_s: 25
+    image: {max_long_side_px: 1536, max_pixels: 1769472, pages_per_call: 1, page_time_p95_ms: 20000}
     reference: {gpus: 1, memory_gb: 8, machine: a GPU held to 8 GB, named after the benchmark}
     placeholder: true
   mt-5:
     name: Small GPU
     stands_for: a 24 GB server GPU such as an L4 or RTX 4090
-    fits: context compression, contracts and long summaries
+    fits: context compression, page parsing, contracts and long summaries
     why: 24 GB is the first cloud price step, about $0.20 to $1.00 an hour.
     open: true
     runtime: vLLM
     device: gpu
     formats: [safetensors]
     precision: [bf16, fp16, awq, gptq]
-    parameters: {min: 1000000000, max: 8000000000}
+    parameters: {max: 8000000000}
     memory_gb: 24
     max_input_tokens: 32768
     max_output_tokens: 4096
     ttft_p95_ms: 4000
     tpot_p95_ms: 60
+    image: {max_long_side_px: 2048, max_pixels: 3145728, pages_per_call: 1, page_time_p95_ms: 15000}
     reference: {gpus: 1, memory_gb: 24, machine: named after the benchmark}
     serving_class: gpu_24gb
     placeholder: true

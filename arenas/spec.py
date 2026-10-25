@@ -48,6 +48,17 @@ def limit_row(key: str, value: Any, device: str) -> list[str]:
         return ["Parameters", span + _billions(value["max"])]
     if key in ("precision", "formats"):
         return [key.capitalize(), ", ".join(map(str, value))]
+    if key == "image":
+        parts = []
+        if "max_long_side_px" in value:
+            parts.append(f"≤ {_int(value['max_long_side_px'])} px long side")
+        if "max_pixels" in value:
+            parts.append(f"≤ {_int(value['max_pixels'])} pixels")
+        if "pages_per_call" in value:
+            parts.append(f"{value['pages_per_call']} page per call")
+        if "page_time_p95_ms" in value:
+            parts.append(f"≤ {value['page_time_p95_ms'] / 1000:g} s per page (p95)")
+        return ["Page image", ", ".join(parts)]
     if key == "memory_gb":
         return ["GPU memory" if device == "gpu" else "Peak memory", f"≤ {value:g} GB"]
     name, template = LIMIT_ROWS[key]
