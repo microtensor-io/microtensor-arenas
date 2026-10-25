@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "system": {"type": "string"},
+    "user": {"type": "string"},
+    "image": {"type": "string", "contentEncoding": "base64", "contentMediaType": "image/png"}
+  },
+  "required": ["system", "user", "image"],
+  "additionalProperties": false
+}

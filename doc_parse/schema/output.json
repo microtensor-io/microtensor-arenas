@@ -1,0 +1,4 @@
+{
+  "type": "string",
+  "description": "Markdown for the page: HTML tables, LaTeX equations, chart data as a Markdown table, Mermaid for flow diagrams, headers and footers as HTML comments"
+}
