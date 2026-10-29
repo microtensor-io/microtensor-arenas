@@ -252,21 +252,21 @@ Within each component the top five eligible miners get 40%, 25%, 15%, 12% and 8%
 
 ## 9. Evaluation and hardware profiles
 
-| Mode | Grader |
+| Grader | Window |
 |---|---|
-| miner: each miner runs its own evaluation on its own GPU and uploads a transcript; validators replay it on CPU and spot check sampled calls on the same hardware profile | pure CPU |
+| pure CPU | Freeze 1 at the open block<br>inputs released when reveals close<br>transcripts uploaded before Freeze 2 at the close block<br>grading in the 1,800 block settle margin (about 6 h) before settlement |
 
-| Window | Spot check |
+| Spot check | Ban |
 |---|---|
-| Freeze 1 at the open block<br>inputs released when reveals close<br>transcripts uploaded before Freeze 2 at the close block<br>grading in the 1,800 block settle margin (about 6 h) before settlement | at least 200 SLM calls per sampled miner, exact token match on the miner's profile; about 2 validators per miner; 20 reference calls timed on the same card |
+| at least 200 SLM calls per sampled miner, exact token match on the miner's profile; about 2 validators per miner; 20 reference calls timed on the same card | score 0 and a hotkey ban for 3 epochs once one piece of evidence has 2 confirmations from distinct validators |
 
-| Ban | Canaries |
+| Canaries | Relay allowance |
 |---|---|
-| score 0 and a hotkey ban for 3 epochs once one piece of evidence has 2 confirmations from distinct validators | 3 fabricated facts per epoch; a model that completes an earlier epoch's canary is banned like a spot check failure |
+| 3 fabricated facts per epoch; a model that completes an earlier epoch's canary is banned like a spot check failure | $2 per miner per epoch |
 
-| Relay allowance | Computed cost |
-|---|---|
-| $2 per miner per epoch | bytes per weight bf16 2, fp16 2, awq 0.5, gptq 0.5, gguf_q4 0.5, gguf_q8 1; no cap per item |
+| Computed cost |
+|---|
+| bytes per weight bf16 2, fp16 2, awq 0.5, gptq 0.5, gguf_q4 0.5, gguf_q8 1; no cap per item |
 
 **Allowed hardware profiles**
 
