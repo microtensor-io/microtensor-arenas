@@ -53,7 +53,10 @@ def test_miner_mode_renders_section_nine_and_reaches_the_definition() -> None:
     assert "evaluation" in built["definition"]["spec"]
     with pytest.raises(ValueError, match="settle margin"):
         definition.build("ctx_compress", genesis_block=1, settle_margin=300)
-    other = definition.load("doc_parse")
-    assert "evaluation" not in other and "profiles" not in other
+    for arena_id in definition.arena_ids():
+        loaded = definition.load(arena_id)
+        assert loaded["evaluation"]["mode"] == "miner" and list(loaded["profiles"]) == ["P1"]
+    other = {k: v for k, v in arena.items() if k not in ("evaluation", "profiles")}
+    assert definition.evaluation(other) is None
     assert "## 9." not in spec.markdown(spec.build(other))
     assert "evaluation" not in spec.build(other)
