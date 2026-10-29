@@ -7,7 +7,33 @@ aliases: [context-compression, compaction, compact]
 timing:
   epoch_blocks: 50400
   commit_blocks: 7200
-  settle_margin: 300
+  settle_margin: 1800
+
+evaluation:
+  mode: miner
+  profiles: [P1]
+  grader_type: model_assisted
+  release:
+    inputs: window_open
+    labels: after_freeze_2
+  images:
+    engine: {image: "vllm/vllm-openai:v0.32.0", digest: "sha256:6ee133356d49ed24cee03dd0cda3d3980279a11c107ce3e752c89e76540f41c9"}
+    runner: {image: "ghcr.io/microtensor-io/runner:1", digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}
+    sandbox: {image: "ghcr.io/microtensor-io/sandbox:1", digest: "sha256:8d99d1c5d57e78fdad612b0c16ff31ad70a03218efc2c11830eda4e1439a210b"}
+    replayer: {image: "ghcr.io/microtensor-io/replayer:1", digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}
+    llama: {image: "ghcr.io/ggml-org/llama.cpp:server", digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}
+  probe:
+    model: Qwen/Qwen2.5-0.5B-Instruct-GGUF
+    revision: 9217f5db79a29953eb74d5343926648285ec7e67
+    file: qwen2.5-0.5b-instruct-q8_0.gguf
+    max_tokens: 64
+  spot_check: {min_calls: 200, validators_per_miner: 2, reference_calls: 20}
+  ban: {epochs: 3, confirmations: 2}
+  canaries: {count: 3}
+  relay_allowance_micros: 2000000
+  computed_cost:
+    bytes_per_weight: {bf16: 2, fp16: 2, awq: 0.5, gptq: 0.5, gguf_q4: 0.5, gguf_q8: 1}
+    cap_units_per_item: 0
 
 purpose:
   summary: >-

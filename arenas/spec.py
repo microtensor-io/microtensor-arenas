@@ -16,6 +16,15 @@ RANK_PAYOUT = (40, 25, 15, 12, 8)
 LADDER_STEP = 0.01
 COMPONENTS = ("Specialised SLM", "Harness", "Router", "Escalation repair", "Full system")
 WEIGHT_NAMES = {"ttft": "TTFT", "memory": "mem", "parameters": "N", "tpot": "TPOT"}
+BLOCKS_PER_HOUR = 300
+MODES = {
+    "validator": "validator: every validator runs every miner's model itself",
+    "miner": (
+        "miner: each miner runs its own evaluation on its own GPU and uploads a transcript; "
+        "validators replay it on CPU and spot check sampled calls on the same hardware profile"
+    ),
+}
+GRADERS = {"pure_cpu": "pure CPU", "model_assisted": "model assisted"}
 LIMIT_ROWS = {
     "max_input_tokens": ("Max input", "{:,} tokens"),
     "max_output_tokens": ("Max output", "{:,} tokens"),
@@ -253,6 +262,101 @@ def _router_score(kind: str, floors: list[float], latency: int) -> list[dict[str
     ]
 
 
+def _grader(block: dict[str, Any]) -> str:
+    text = GRADERS[block["grader_type"]]
+    probe = block.get("probe")
+    if block["grader_type"] == "model_assisted" and probe:
+        text += (
+            f", probe `{probe['model']}` {probe['file']} at `{probe['revision'][:12]}`, "
+            f"{probe['max_tokens']} tokens, on the validator's CPU"
+        )
+    return text
+
+
+def _window(timing: dict[str, Any]) -> str:
+    margin = int(timing["settle_margin"])
+    return (
+        "Freeze 1 at the open block · inputs released when reveals close · transcripts "
+        f"uploaded before Freeze 2 at the close block · grading in the {_int(margin)} block "
+        f"settle margin (about {margin / BLOCKS_PER_HOUR:g} h) before settlement"
+    )
+
+
+def _evaluation(arena: dict[str, Any]) -> dict[str, Any]:
+    block = arena["evaluation"]
+    rows: list[list[str]] = [["Mode", MODES[block["mode"]]]]
+    if "grader_type" in block:
+        rows.append(["Grader", _grader(block)])
+    if block["mode"] == "miner":
+        rows.append(["Window", _window(arena["timing"])])
+    if "spot_check" in block:
+        spot = block["spot_check"]
+        rows.append(
+            [
+                "Spot check",
+                (
+                    f"at least {_int(spot['min_calls'])} SLM calls per sampled miner, exact token "
+                    f"match on the miner's profile; about {spot['validators_per_miner']} "
+                    f"validators per miner; {spot['reference_calls']} reference calls timed on "
+                    "the same card"
+                ),
+            ]
+        )
+    if "ban" in block:
+        ban = block["ban"]
+        rows.append(
+            [
+                "Ban",
+                (
+                    f"score 0 and a hotkey ban for {ban['epochs']} epochs once one piece of "
+                    f"evidence has {ban['confirmations']} confirmations from distinct validators"
+                ),
+            ]
+        )
+    if "canaries" in block:
+        rows.append(
+            [
+                "Canaries",
+                (
+                    f"{block['canaries']['count']} fabricated facts per epoch; a model that "
+                    "completes an earlier epoch's canary is banned like a spot check failure"
+                ),
+            ]
+        )
+    if "relay_allowance_micros" in block:
+        rows.append(
+            ["Relay allowance", f"${block['relay_allowance_micros'] / 1e6:g} per miner per epoch"]
+        )
+    if "computed_cost" in block:
+        cost = block["computed_cost"]
+        weights = ", ".join(f"{k} {v:g}" for k, v in cost["bytes_per_weight"].items())
+        cap = cost["cap_units_per_item"]
+        rows.append(
+            [
+                "Computed cost",
+                f"bytes per weight {weights}; "
+                + (f"cap {_int(cap)} units per item" if cap else "no cap per item"),
+            ]
+        )
+    profiles = [
+        [
+            name,
+            entry["name"],
+            ", ".join(entry.get("gpus") or ["any x86 CPU"])
+            + (f" (joining: {', '.join(entry['joining'])})" if entry.get("joining") else ""),
+            entry["precision"],
+            entry["batching"],
+            entry["status"].replace("_", " "),
+        ]
+        for name, entry in (arena.get("profiles") or {}).items()
+    ]
+    images = [
+        [name, f"`{entry['image']}`", f"`{entry['digest']}`"]
+        for name, entry in (block.get("images") or {}).items()
+    ]
+    return {"mode": block["mode"], "rows": rows, "profiles": profiles, "images": images}
+
+
 def build(arena: dict[str, Any]) -> dict[str, Any]:
     slm = arena["slm"]
     envelope = arena["envelope"]
@@ -269,7 +373,7 @@ def build(arena: dict[str, Any]) -> dict[str, Any]:
         if scoring["empty_pools"] == "burn"
         else "An empty pool's share goes to the winners of the other pools."
     )
-    return {
+    page = {
         "id": arena["id"],
         "title": arena["title"],
         "category": arena["category"],
@@ -369,6 +473,9 @@ def build(arena: dict[str, Any]) -> dict[str, Any]:
         },
         "item_counts": arena["item_counts"],
     }
+    if arena.get("evaluation"):
+        page["evaluation"] = _evaluation(arena)
+    return page
 
 
 def _escape(text: str) -> str:
@@ -502,4 +609,34 @@ def markdown(page: dict[str, Any]) -> str:
         *_across([[test, _int(count)] for test, count in page["item_counts"].items()]),
         "",
     ]
+    if page.get("evaluation"):
+        lines += _evaluation_section(page["evaluation"])
     return "\n".join(lines)
+
+
+def _evaluation_section(evaluation: dict[str, Any]) -> list[str]:
+    lines = ["## 9. Evaluation and hardware profiles", "", *_across(evaluation["rows"], 2), ""]
+    if evaluation["profiles"]:
+        lines += [
+            "**Allowed hardware profiles**",
+            "",
+            (
+                "A profile is one GPU architecture, one driver and one image digest. A miner "
+                "declares its profile in its commitment and is spot checked only by validators "
+                "on the same profile."
+            ),
+            "",
+            *_table(
+                ("Profile", "Name", "GPUs", "Precision", "Batching", "Status"),
+                evaluation["profiles"],
+            ),
+            "",
+        ]
+    if evaluation["images"]:
+        lines += [
+            "**Official images, pulled by digest**",
+            "",
+            *_table(("Image", "Name", "Digest"), evaluation["images"]),
+            "",
+        ]
+    return lines

@@ -14,7 +14,7 @@ Each folder holds:
 
 | File | What it is |
 |---|---|
-| `arena.yaml` | The arena: purpose, specialised SLM, evaluation, envelope group, scoring, harness, router, escalation, floors, item counts |
+| `arena.yaml` | The arena: purpose, specialised SLM, evaluation, envelope group, scoring, harness, router, escalation, floors, item counts, and for miner mode arenas the `evaluation` block (allowed hardware profiles, images by digest, probe, spot check, ban and canary numbers) |
 | `schema/input.json`, `schema/output.json` | The task's input and output schemas |
 | `ARENA.md` | The arena page, rendered from `arena.yaml` |
 | `data/README.md` | The attached dataset and how to build dev items from it |
@@ -26,8 +26,9 @@ Each folder holds:
 |---|---|
 | `shared/envelopes.yaml` | The six envelope classes (mt-1 Budget phone, mt-2 Phone, mt-3 CPU, mt-4 AI PC, mt-5 Small GPU, mt-6 Large), which are open on testnet and mainnet, their rules and how validators measure them |
 | `shared/bases.yaml` | Every allowed base model with its pinned revision, licence, size, the groups it fits and any licence condition |
+| `shared/profiles.yaml` | The hardware profiles miners and validators run on in miner mode (P1 to P3, K, C): one GPU architecture, precision and batching mode each, with the calibration rule a profile must pass |
 
-An arena names one group and may only tighten its limits. Its bases come from the shared list and must fit its group. The same values are served at `GET /v2/envelopes` and `GET /v2/bases`.
+An arena names one group and may only tighten its limits. Its bases come from the shared list and must fit its group. An arena in miner mode lists its allowed profiles from the shared list and pins every image by digest, never by tag alone. The same values are served at `GET /v2/envelopes`, `GET /v2/bases` and `GET /v2/profiles`.
 
 ## Dev items
 
