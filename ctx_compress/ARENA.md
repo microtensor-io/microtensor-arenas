@@ -231,3 +231,39 @@ Within each component the top five eligible miners get 40%, 25%, 15%, 12% and 8%
 | slm | harness | router | escalation | system |
 |---|---|---|---|---|
 | 100 | 100 | 60 | 100 | 100 |
+
+## 9. Evaluation and hardware profiles
+
+| Mode | Grader |
+|---|---|
+| miner: each miner runs its own evaluation on its own GPU and uploads a transcript; validators replay it on CPU and spot check sampled calls on the same hardware profile | model assisted, probe `Qwen/Qwen2.5-0.5B-Instruct-GGUF` qwen2.5-0.5b-instruct-q8_0.gguf at `9217f5db79a2`, 64 tokens, on the validator's CPU |
+
+| Window | Spot check |
+|---|---|
+| Freeze 1 at the open block<br>inputs released when reveals close<br>transcripts uploaded before Freeze 2 at the close block<br>grading in the 1,800 block settle margin (about 6 h) before settlement | at least 200 SLM calls per sampled miner, exact token match on the miner's profile; about 2 validators per miner; 20 reference calls timed on the same card |
+
+| Ban | Canaries |
+|---|---|
+| score 0 and a hotkey ban for 3 epochs once one piece of evidence has 2 confirmations from distinct validators | 3 fabricated facts per epoch; a model that completes an earlier epoch's canary is banned like a spot check failure |
+
+| Relay allowance | Computed cost |
+|---|---|
+| $2 per miner per epoch | bytes per weight bf16 2, fp16 2, awq 0.5, gptq 0.5, gguf_q4 0.5, gguf_q8 1; no cap per item |
+
+**Allowed hardware profiles**
+
+A profile is one GPU architecture, one driver and one image digest. A miner declares its profile in its commitment and is spot checked only by validators on the same profile.
+
+| Profile | Name | GPUs | Precision | Batching | Status |
+|---|---|---|---|---|---|
+| P1 | Small GPU | RTX 4090 24 GB (joining: L4, L40S) | bf16 | invariant | launch |
+
+**Official images, pulled by digest**
+
+| Image | Name | Digest |
+|---|---|---|
+| engine | `vllm/vllm-openai:v0.32.0` | `sha256:6ee133356d49ed24cee03dd0cda3d3980279a11c107ce3e752c89e76540f41c9` |
+| runner | `ghcr.io/microtensor-io/runner:1` | `sha256:0000000000000000000000000000000000000000000000000000000000000000` |
+| sandbox | `ghcr.io/microtensor-io/sandbox:1` | `sha256:c2c90ba0740efac7cdb1050b3bd2e8c7e1897fc79fbaf31d33fe3aad4d4d4549` |
+| replayer | `ghcr.io/microtensor-io/replayer:1` | `sha256:0000000000000000000000000000000000000000000000000000000000000000` |
+| llama | `ghcr.io/ggml-org/llama.cpp:server` | `sha256:43b3988c22c00faae3d04a8f6e3eba41403dff7c5f5952490599f1bcbdc6f3c2` |
