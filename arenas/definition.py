@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,26 @@ from arenas import envelopes, spec
 ROOT = Path(__file__).resolve().parent.parent
 ARENA_ID = "sql_gen"
 NETWORKS = ("testnet", "mainnet")
+EVALUATION_MODES = ("validator", "miner")
+GRADER_TYPES = ("pure_cpu", "model_assisted")
+IMAGES = ("engine", "runner", "sandbox", "replayer", "llama")
+RELEASE = {"inputs": "window_open", "labels": "after_freeze_2"}
+EVALUATION_KEYS = (
+    "mode",
+    "profiles",
+    "grader_type",
+    "release",
+    "images",
+    "probe",
+    "spot_check",
+    "ban",
+    "canaries",
+    "relay_allowance_micros",
+    "computed_cost",
+)
+MINER_SETTLE_MARGIN = 1800
+DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+REVISION = re.compile(r"^[0-9a-f]{40}$")
 ITEM_COUNTS = {"slm": 400, "harness": 400, "router": 250, "escalation": 120, "system": 400}
 SCORING: dict[str, Any] = {
     "wilson_z": 1.645,
@@ -50,7 +71,159 @@ def load(arena_id: str) -> dict[str, Any]:
     arena["envelope"] = envelopes.resolve(arena["envelope"])
     arena["scoring"] = scoring(arena)
     arena["slm"] = {**arena["slm"], "bases": _bases(arena)}
+    block = evaluation(arena)
+    if block is not None:
+        arena["profiles"] = {name: profiles()[name] for name in block.get("profiles") or []}
     return arena
+
+
+def profiles() -> dict[str, dict[str, Any]]:
+    found: dict[str, dict[str, Any]] = envelopes.document("profiles")["profiles"]
+    return found
+
+
+def _mapping(value: Any, where: str) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    raise ValueError(f"{where} must be a mapping")
+
+
+def _exact(block: dict[str, Any], keys: tuple[str, ...], where: str) -> None:
+    for key in block:
+        if key not in keys:
+            raise ValueError(f"unknown key {key!r} in {where}")
+    for key in keys:
+        if key not in block:
+            raise ValueError(f"{where}.{key} is required")
+
+
+def _positive(block: dict[str, Any], key: str, where: str, *, zero: bool = False) -> None:
+    value = block.get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < (0 if zero else 1):
+        kind = "a non negative" if zero else "a positive"
+        raise ValueError(f"{where}.{key} must be {kind} integer")
+
+
+def _profiles(value: Any) -> None:
+    if not isinstance(value, list) or not value:
+        raise ValueError("evaluation.profiles must list at least one profile")
+    known = profiles()
+    for name in value:
+        if name not in known:
+            raise ValueError(
+                f"unknown profile {name!r} in evaluation.profiles; known: {', '.join(known)}"
+            )
+    if len(set(value)) != len(value):
+        raise ValueError("evaluation.profiles repeats a profile")
+
+
+def _image(name: str, entry: Any) -> None:
+    where = f"evaluation.images.{name}"
+    block = _mapping(entry, where)
+    _exact(block, ("image", "digest"), where)
+    image = block["image"]
+    if not isinstance(image, str) or "@" in image:
+        raise ValueError(f"{where}.image must be name:tag; the digest goes in {where}.digest")
+    repository, _, tag = image.rpartition(":")
+    if not repository or not tag or "/" in tag:
+        raise ValueError(f"{where}.image {image!r} needs a tag")
+    if tag == "latest":
+        raise ValueError(f"{where}.image must never use the latest tag")
+    digest = block["digest"]
+    if not isinstance(digest, str) or not DIGEST.match(digest):
+        raise ValueError(f"{where}.digest must be sha256: followed by 64 hex characters")
+
+
+def _images(value: Any, *, complete: bool) -> None:
+    block = _mapping(value, "evaluation.images")
+    for name in block:
+        if name not in IMAGES:
+            raise ValueError(
+                f"unknown image {name!r} in evaluation.images; one of {', '.join(IMAGES)}"
+            )
+    if complete:
+        for name in IMAGES:
+            if name not in block:
+                raise ValueError(f"evaluation.images.{name} is required in miner mode")
+    for name, entry in block.items():
+        _image(name, entry)
+
+
+def _probe(value: Any) -> None:
+    where = "evaluation.probe"
+    block = _mapping(value, where)
+    _exact(block, ("model", "revision", "file", "max_tokens"), where)
+    if not isinstance(block["model"], str) or "/" not in block["model"]:
+        raise ValueError(f"{where}.model must be a Hugging Face repository id")
+    if not isinstance(block["revision"], str) or not REVISION.match(block["revision"]):
+        raise ValueError(f"{where}.revision must be a 40 hex commit sha")
+    if not isinstance(block["file"], str) or not block["file"].endswith(".gguf"):
+        raise ValueError(f"{where}.file must name a .gguf file")
+    _positive(block, "max_tokens", where)
+
+
+def _counts(value: Any, keys: tuple[str, ...], where: str) -> None:
+    block = _mapping(value, where)
+    _exact(block, keys, where)
+    for key in keys:
+        _positive(block, key, where)
+
+
+def _computed_cost(value: Any) -> None:
+    where = "evaluation.computed_cost"
+    block = _mapping(value, where)
+    _exact(block, ("bytes_per_weight", "cap_units_per_item"), where)
+    weights = _mapping(block["bytes_per_weight"], f"{where}.bytes_per_weight")
+    if not weights:
+        raise ValueError(f"{where}.bytes_per_weight must list at least one precision")
+    for precision, amount in weights.items():
+        if isinstance(amount, bool) or not isinstance(amount, (int, float)) or amount <= 0:
+            raise ValueError(f"{where}.bytes_per_weight.{precision} must be a positive number")
+    _positive(block, "cap_units_per_item", where, zero=True)
+
+
+def evaluation(arena: dict[str, Any]) -> dict[str, Any] | None:
+    if "evaluation" not in arena:
+        return None
+    block = _mapping(arena["evaluation"], "evaluation")
+    for key in block:
+        if key not in EVALUATION_KEYS:
+            raise ValueError(f"unknown key {key!r} in evaluation")
+    mode = block.get("mode")
+    if mode not in EVALUATION_MODES:
+        raise ValueError(f"evaluation.mode must be one of {', '.join(EVALUATION_MODES)}")
+    miner = mode == "miner"
+    if miner:
+        for key in EVALUATION_KEYS:
+            if key not in block:
+                raise ValueError(f"evaluation.{key} is required in miner mode")
+    if "profiles" in block:
+        _profiles(block["profiles"])
+    if "grader_type" in block and block["grader_type"] not in GRADER_TYPES:
+        raise ValueError(f"evaluation.grader_type must be one of {', '.join(GRADER_TYPES)}")
+    if "release" in block and _mapping(block["release"], "evaluation.release") != RELEASE:
+        raise ValueError(
+            "evaluation.release must be inputs: window_open and labels: after_freeze_2"
+        )
+    if "images" in block:
+        _images(block["images"], complete=miner)
+    if "probe" in block:
+        _probe(block["probe"])
+    if "spot_check" in block:
+        _counts(
+            block["spot_check"],
+            ("min_calls", "validators_per_miner", "reference_calls"),
+            "evaluation.spot_check",
+        )
+    if "ban" in block:
+        _counts(block["ban"], ("epochs", "confirmations"), "evaluation.ban")
+    if "canaries" in block:
+        _counts(block["canaries"], ("count",), "evaluation.canaries")
+    if "relay_allowance_micros" in block:
+        _positive(block, "relay_allowance_micros", "evaluation")
+    if "computed_cost" in block:
+        _computed_cost(block["computed_cost"])
+    return block
 
 
 def scoring(arena: dict[str, Any]) -> dict[str, Any]:
@@ -176,6 +349,13 @@ def build(
             raise ValueError("sql_gen needs the sha256 of its sample database")
         body["sample_database"] = sample_database
     timing = arena["timing"]
+    if arena.get("evaluation"):
+        body["evaluation"] = arena["evaluation"]
+        if arena["evaluation"]["mode"] == "miner" and timing["settle_margin"] < MINER_SETTLE_MARGIN:
+            raise ValueError(
+                f"miner mode needs a settle margin of at least {MINER_SETTLE_MARGIN} blocks "
+                f"(6 h) so grading fits; {arena['id']} has {timing['settle_margin']}"
+            )
     return {
         "id": arena["id"],
         "title": arena["title"],
