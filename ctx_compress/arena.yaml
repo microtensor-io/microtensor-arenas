@@ -19,9 +19,9 @@ evaluation:
   images:
     engine: {image: "vllm/vllm-openai:v0.32.0", digest: "sha256:6ee133356d49ed24cee03dd0cda3d3980279a11c107ce3e752c89e76540f41c9"}
     runner: {image: "ghcr.io/microtensor-io/runner:1", digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}
-    sandbox: {image: "ghcr.io/microtensor-io/sandbox:1", digest: "sha256:c2c90ba0740efac7cdb1050b3bd2e8c7e1897fc79fbaf31d33fe3aad4d4d4549"}
+    sandbox: {image: "ghcr.io/microtensor-io/sandbox:1", digest: "sha256:8d99d1c5d57e78fdad612b0c16ff31ad70a03218efc2c11830eda4e1439a210b"}
     replayer: {image: "ghcr.io/microtensor-io/replayer:1", digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}
-    llama: {image: "ghcr.io/ggml-org/llama.cpp:server", digest: "sha256:43b3988c22c00faae3d04a8f6e3eba41403dff7c5f5952490599f1bcbdc6f3c2"}
+    llama: {image: "ghcr.io/ggml-org/llama.cpp:server", digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}
   probe:
     model: Qwen/Qwen2.5-0.5B-Instruct-GGUF
     revision: 9217f5db79a29953eb74d5343926648285ec7e67
