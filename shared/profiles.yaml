@@ -7,5 +7,5 @@ profiles:
   P1: {name: Small GPU, arch: sm89, gpus: [RTX 4090 24 GB], joining: [L4, L40S], precision: bf16, batching: invariant, status: launch, memory_gb: 24}
   P2: {name: Data centre A100, arch: sm80, gpus: [A100 80 GB SXM, A100 80 GB PCIe], precision: bf16, batching: invariant, status: after_calibration, memory_gb: 80}
   P3: {name: Data centre H100, arch: sm90, gpus: [H100 80 GB], joining: [H200], precision: bf16, batching: invariant, status: after_calibration, memory_gb: 80}
-  K:  {name: Kaggle T4, arch: sm75, gpus: [T4 16 GB x2], precision: fp16, batching: single, status: candidate, memory_gb: 32, tensor_parallel: 2, small_models_only: true}
+  K:  {name: T4, arch: sm75, gpus: [T4 16 GB x2], precision: fp16, batching: single, status: candidate, memory_gb: 32, tensor_parallel: 2, small_models_only: true}
   C:  {name: CPU, arch: cpu, precision: gguf, batching: single, status: after_calibration, threads: 8}
