@@ -12,7 +12,7 @@ from arenas import envelopes, spec
 ROOT = Path(__file__).resolve().parent.parent
 ARENA_ID = "sql_gen"
 NETWORKS = ("testnet", "mainnet")
-EVALUATION_MODES = ("validator", "miner")
+EVALUATION_MODES = ("miner",)
 GRADER_TYPES = ("pure_cpu", "model_assisted")
 IMAGES = ("engine", "runner", "sandbox", "replayer", "llama")
 RELEASE = {"inputs": "window_open", "labels": "after_freeze_2"}
@@ -144,7 +144,7 @@ def _images(value: Any, *, complete: bool) -> None:
     if complete:
         for name in IMAGES:
             if name not in block:
-                raise ValueError(f"evaluation.images.{name} is required in miner mode")
+                raise ValueError(f"evaluation.images.{name} is required")
     for name, entry in block.items():
         _image(name, entry)
 
@@ -196,7 +196,7 @@ def evaluation(arena: dict[str, Any]) -> dict[str, Any] | None:
     if miner:
         for key in EVALUATION_KEYS:
             if key not in block:
-                raise ValueError(f"evaluation.{key} is required in miner mode")
+                raise ValueError(f"evaluation.{key} is required")
     if "profiles" in block:
         _profiles(block["profiles"])
     if "grader_type" in block and block["grader_type"] not in GRADER_TYPES:
@@ -353,7 +353,7 @@ def build(
         body["evaluation"] = arena["evaluation"]
         if arena["evaluation"]["mode"] == "miner" and timing["settle_margin"] < MINER_SETTLE_MARGIN:
             raise ValueError(
-                f"miner mode needs a settle margin of at least {MINER_SETTLE_MARGIN} blocks "
+                f"the arena needs a settle margin of at least {MINER_SETTLE_MARGIN} blocks "
                 f"(6 h) so grading fits; {arena['id']} has {timing['settle_margin']}"
             )
     return {
