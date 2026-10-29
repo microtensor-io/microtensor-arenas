@@ -263,7 +263,7 @@ A profile is one GPU architecture, one driver and one image digest. A miner decl
 | Image | Name | Digest |
 |---|---|---|
 | engine | `vllm/vllm-openai:v0.32.0` | `sha256:6ee133356d49ed24cee03dd0cda3d3980279a11c107ce3e752c89e76540f41c9` |
-| runner | `ghcr.io/microtensor-io/runner:1` | `sha256:0000000000000000000000000000000000000000000000000000000000000000` |
-| sandbox | `ghcr.io/microtensor-io/sandbox:1` | `sha256:8d99d1c5d57e78fdad612b0c16ff31ad70a03218efc2c11830eda4e1439a210b` |
-| replayer | `ghcr.io/microtensor-io/replayer:1` | `sha256:0000000000000000000000000000000000000000000000000000000000000000` |
-| llama | `ghcr.io/ggml-org/llama.cpp:server` | `sha256:0000000000000000000000000000000000000000000000000000000000000000` |
+| runner | `ghcr.io/microtensor-io/runner:1` | `sha256:aada28e6a4b50961d10bf63cb04c30e8449e4bfb6e385fbad7f387cf8eb9b9dd` |
+| sandbox | `ghcr.io/microtensor-io/sandbox:1` | `sha256:eee4de3bd46f722a9a6b12ec5c1cec5e0580d6dd2844c3e4ff50a8a44a3ed1a6` |
+| replayer | `ghcr.io/microtensor-io/replayer:1` | `sha256:537675d1db529fbbbe16bd5c30f3b7a2e6326eade33fa1e7e2ee3df7861edbe9` |
+| llama | `ghcr.io/ggml-org/llama.cpp:server` | `sha256:43b3988c22c00faae3d04a8f6e3eba41403dff7c5f5952490599f1bcbdc6f3c2` |
