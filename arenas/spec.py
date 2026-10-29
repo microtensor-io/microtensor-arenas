@@ -17,13 +17,6 @@ LADDER_STEP = 0.01
 COMPONENTS = ("Specialised SLM", "Harness", "Router", "Escalation repair", "Full system")
 WEIGHT_NAMES = {"ttft": "TTFT", "memory": "mem", "parameters": "N", "tpot": "TPOT"}
 BLOCKS_PER_HOUR = 300
-MODES = {
-    "validator": "validator: every validator runs every miner's model itself",
-    "miner": (
-        "miner: each miner runs its own evaluation on its own GPU and uploads a transcript; "
-        "validators replay it on CPU and spot check sampled calls on the same hardware profile"
-    ),
-}
 GRADERS = {"pure_cpu": "pure CPU", "model_assisted": "model assisted"}
 LIMIT_ROWS = {
     "max_input_tokens": ("Max input", "{:,} tokens"),
@@ -284,11 +277,10 @@ def _window(timing: dict[str, Any]) -> str:
 
 def _evaluation(arena: dict[str, Any]) -> dict[str, Any]:
     block = arena["evaluation"]
-    rows: list[list[str]] = [["Mode", MODES[block["mode"]]]]
+    rows: list[list[str]] = []
     if "grader_type" in block:
         rows.append(["Grader", _grader(block)])
-    if block["mode"] == "miner":
-        rows.append(["Window", _window(arena["timing"])])
+    rows.append(["Window", _window(arena["timing"])])
     if "spot_check" in block:
         spot = block["spot_check"]
         rows.append(
