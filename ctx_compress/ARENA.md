@@ -12,13 +12,11 @@ Long running coding agents fill their context window, then compact the session i
 
 ## 2. Specialised SLM
 
-**Allowed base models**
+**Base model**
 
 | Model | Licence |
 |---|---|
 | `Qwen/Qwen2.5-Coder-7B-Instruct` | [Apache 2.0](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct/blob/main/LICENSE) |
-| `Qwen/Qwen2.5-Coder-1.5B-Instruct` | [Apache 2.0](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct/blob/main/LICENSE) |
-| `microsoft/Phi-4-mini-instruct` | [MIT](https://huggingface.co/microsoft/Phi-4-mini-instruct/resolve/main/LICENSE) |
 
 Reference model: `Qwen/Qwen2.5-Coder-7B-Instruct` at `c03e6d358207`
 
