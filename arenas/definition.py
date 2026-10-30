@@ -236,10 +236,19 @@ def scoring(arena: dict[str, Any]) -> dict[str, Any]:
     return found
 
 
+MAX_BASES = 5
+
+
 def _bases(arena: dict[str, Any]) -> list[dict[str, Any]]:
     group = arena["envelope"]["group"]
+    reference = arena["slm"].get("reference")
+    if not isinstance(reference, dict) or set(reference) != {"model", "revision"}:
+        raise ValueError("slm.reference names exactly one model with its revision")
+    names = list(arena["slm"]["bases"])
+    if not 1 <= len(names) <= MAX_BASES:
+        raise ValueError(f"an arena allows between 1 and {MAX_BASES} bases, not {len(names)}")
     found = []
-    for model in arena["slm"]["bases"]:
+    for model in names:
         entry = envelopes.base(model)
         if group not in entry["groups"]:
             raise ValueError(f"{model} does not fit envelope group {group}")
