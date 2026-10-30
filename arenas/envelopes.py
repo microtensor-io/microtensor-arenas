@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,8 @@ LIMITS = (*MAXIMA, *MINIMA, *SUBSETS, "parameters", "image")
 @cache
 def document(kind: str) -> dict[str, Any]:
     found: dict[str, Any] = yaml.safe_load((SHARED / f"{kind}.yaml").read_text(encoding="utf-8"))
+    if isinstance(found.get("checked"), datetime.date):
+        found["checked"] = found["checked"].isoformat()
     return found
 
 
