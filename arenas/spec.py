@@ -549,7 +549,7 @@ def markdown(page: dict[str, Any]) -> str:
         "",
         "## 2. Specialised SLM",
         "",
-        "**Allowed base models**",
+        "**Base model**",
         "",
         *_table(head, bases),
         "",

@@ -28,7 +28,7 @@ Each folder holds:
 | `shared/bases.yaml` | Every allowed base model with its pinned revision, licence, size, the groups it fits and any licence condition |
 | `shared/profiles.yaml` | The hardware profiles miners and validators run on (P1 to P3, K, C): one GPU architecture, precision and batching mode each, with the calibration rule a profile must pass |
 
-An arena names one group and may only tighten its limits. It names exactly one reference model, the only scoring yardstick, and one to five allowed bases; both come from the shared list and must fit its group. An arena lists its allowed profiles from the shared list and pins every image by digest, never by tag alone. The same values are served at `GET /v2/envelopes`, `GET /v2/bases` and `GET /v2/profiles`.
+An arena names one group and may only tighten its limits. It names exactly one base model, the one miners fine tune from and are scored against; it comes from the shared list and must fit its group. An arena lists its allowed profiles from the shared list and pins every image by digest, never by tag alone. The same values are served at `GET /v2/envelopes`, `GET /v2/bases` and `GET /v2/profiles`.
 
 ## Dev items
 

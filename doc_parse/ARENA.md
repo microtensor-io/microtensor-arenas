@@ -12,15 +12,11 @@ Businesses feed contracts, invoices, financial statements and reports into AI sy
 
 ## 2. Specialised SLM
 
-**Allowed base models**
+**Base model**
 
 | Model | Licence |
 |---|---|
 | `Qwen/Qwen3-VL-4B-Instruct` | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
-| `Qwen/Qwen3-VL-2B-Instruct` | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
-| `deepseek-ai/DeepSeek-OCR` | [MIT](https://huggingface.co/deepseek-ai/DeepSeek-OCR/blob/main/LICENSE) |
-| `PaddlePaddle/PaddleOCR-VL` | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
-| `ibm-granite/granite-docling-258M` | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
 
 Reference model: `Qwen/Qwen3-VL-4B-Instruct` at `ebb281ec70b0`
 
