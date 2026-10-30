@@ -1,5 +1,5 @@
-version: 3
-checked: 2026-10-25
+version: 4
+checked: 2026-10-30
 bases:
   - model: Qwen/Qwen2.5-0.5B-Instruct
     revision: 7ae557604adf67be50417f59c2c2f167def9a775
@@ -110,6 +110,15 @@ bases:
     licence_name: Apache 2.0
     licence_url: https://www.apache.org/licenses/LICENSE-2.0
     parameters: 4437815808
+    gated: false
+    vision: true
+    groups: [mt-4, mt-5]
+  - model: lightonai/LightOnOCR-2-1B
+    revision: be7c41313c30e940fe5571de59e5fabc779e00c8
+    licence: apache-2.0
+    licence_name: Apache 2.0
+    licence_url: https://www.apache.org/licenses/LICENSE-2.0
+    parameters: 1005647872
     gated: false
     vision: true
     groups: [mt-4, mt-5]
