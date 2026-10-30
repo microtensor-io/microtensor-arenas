@@ -54,10 +54,10 @@ purpose:
 slm:
   model_class: AutoModelForImageTextToText
   bases:
-    - Qwen/Qwen3-VL-4B-Instruct
+    - lightonai/LightOnOCR-2-1B
   reference:
-    model: Qwen/Qwen3-VL-4B-Instruct
-    revision: ebb281ec70b05090aa6165b016eac8ec08e71b17
+    model: lightonai/LightOnOCR-2-1B
+    revision: be7c41313c30e940fe5571de59e5fabc779e00c8
   dataset:
     name: allenai/olmOCR-mix-1025
     url: https://huggingface.co/datasets/allenai/olmOCR-mix-1025
@@ -71,7 +71,8 @@ slm:
       invoices. FinTabNet's licence is still to confirm. OmniDocBench is research only: cite it,
       never train or grade on it.
     note: ODC-BY; the card calls it research and educational data, to be confirmed with Ai2.
-  prompt: "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>{user}<|im_end|>\n<|im_start|>assistant\n"
+  prompt: "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n<|image_pad|>
+{user}<|im_end|>\n<|im_start|>assistant\n"
   stop: ["<|im_end|>", "<|endoftext|>", "<|end|>"]
   grader: page_parsing
   primary_metric: item_score_pass_rate

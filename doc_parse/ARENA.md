@@ -16,9 +16,9 @@ Businesses feed contracts, invoices, financial statements and reports into AI sy
 
 | Model | Licence |
 |---|---|
-| `Qwen/Qwen3-VL-4B-Instruct` | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
+| `lightonai/LightOnOCR-2-1B` | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
 
-Reference model: `Qwen/Qwen3-VL-4B-Instruct` at `ebb281ec70b0`
+Reference model: `lightonai/LightOnOCR-2-1B` at `be7c41313c30`
 
 **Dataset**
 
