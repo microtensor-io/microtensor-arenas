@@ -71,8 +71,7 @@ slm:
       invoices. FinTabNet's licence is still to confirm. OmniDocBench is research only: cite it,
       never train or grade on it.
     note: ODC-BY; the card calls it research and educational data, to be confirmed with Ai2.
-  prompt: "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n<|image_pad|>
-{user}<|im_end|>\n<|im_start|>assistant\n"
+  prompt: "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n<|image_pad|>\n{user}<|im_end|>\n<|im_start|>assistant\n"
   stop: ["<|im_end|>", "<|endoftext|>", "<|end|>"]
   grader: page_parsing
   primary_metric: item_score_pass_rate
