@@ -236,6 +236,61 @@ def scoring(arena: dict[str, Any]) -> dict[str, Any]:
     return found
 
 
+SERVING_KEYS = (
+    "rate",
+    "unit",
+    "usd_in_per_mtok",
+    "usd_out_per_mtok",
+    "cap_schedule",
+    "floor_epochs",
+    "floor_share",
+)
+MAX_FLOOR_SHARE = 0.5
+
+
+def _schedule(value: Any) -> None:
+    if not isinstance(value, list) or not value:
+        raise ValueError("serving.cap_schedule is a list of bands")
+    previous: float | None = None
+    for index, band in enumerate(value):
+        band = _mapping(band, "serving.cap_schedule band")
+        if set(band) - {"billing_usd_below", "cap"}:
+            raise ValueError("a cap schedule band carries cap and optionally billing_usd_below")
+        if not isinstance(band.get("cap"), int | float) or not 0 <= band["cap"] <= 1:
+            raise ValueError("each cap schedule band needs a cap between 0 and 1")
+        bound = band.get("billing_usd_below")
+        if bound is None:
+            if index != len(value) - 1:
+                raise ValueError("the band without billing_usd_below must be the last one")
+            continue
+        if not isinstance(bound, int | float) or bound < 0:
+            raise ValueError("billing_usd_below is an amount in USD")
+        if previous is not None and bound <= previous:
+            raise ValueError("cap schedule bands must rise in billing_usd_below")
+        previous = float(bound)
+    if "billing_usd_below" in value[-1]:
+        raise ValueError("the cap schedule needs a last band without billing_usd_below")
+
+
+def _serving(arena: dict[str, Any]) -> dict[str, Any]:
+    serving = dict(arena.get("serving") or {})
+    unknown = set(serving) - set(SERVING_KEYS)
+    if unknown:
+        raise ValueError(f"serving carries unknown keys: {', '.join(sorted(unknown))}")
+    if "cap_schedule" in serving:
+        _schedule(serving["cap_schedule"])
+    if "floor_epochs" in serving and (
+        not isinstance(serving["floor_epochs"], int) or serving["floor_epochs"] < 0
+    ):
+        raise ValueError("serving.floor_epochs is a whole number of epochs")
+    if "floor_share" in serving and (
+        not isinstance(serving["floor_share"], int | float)
+        or not 0 <= serving["floor_share"] <= MAX_FLOOR_SHARE
+    ):
+        raise ValueError(f"serving.floor_share is between 0 and {MAX_FLOOR_SHARE}")
+    return serving
+
+
 def _bases(arena: dict[str, Any]) -> list[dict[str, Any]]:
     group = arena["envelope"]["group"]
     reference = arena["slm"].get("reference")
@@ -342,7 +397,7 @@ def build(
         "fee_coldkey": arena["fee"]["coldkey"],
         "hardware_classes": [envelopes.serving_class(envelope)],
         "chat": arena["chat"],
-        "serving": arena.get("serving", {}),
+        "serving": _serving(arena),
         "spec": spec.build(arena),
         "guide": None,
     }

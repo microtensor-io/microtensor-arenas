@@ -195,3 +195,9 @@ serving:
   unit: request
   usd_in_per_mtok: 0.05
   usd_out_per_mtok: 0.2
+  cap_schedule:
+    - {billing_usd_below: 5000, cap: 0.10}
+    - {billing_usd_below: 50000, cap: 0.05}
+    - {cap: 0.02}
+  floor_epochs: 3
+  floor_share: 0.01
