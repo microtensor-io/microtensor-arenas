@@ -1,15 +1,25 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from typing import Any
-
-from arenas.compress.trajectory import Observed, Session, next_action
 
 MAX_FILES = 12
 MAX_ERRORS = 5
 MAX_SYMBOLS = 8
 BOUNDARY_BEFORE = r"(?<![\w.-])"
 BOUNDARY_AFTER = r"(?![\w-])"
+
+
+@dataclass(slots=True)
+class Observed:
+    opened: list[str] = field(default_factory=list)
+    created: list[str] = field(default_factory=list)
+    edited: list[str] = field(default_factory=list)
+    errors: list[tuple[str, str]] = field(default_factory=list)
+    frames: list[tuple[str, str]] = field(default_factory=list)
+    symbols: list[str] = field(default_factory=list)
+    tests: list[bool] = field(default_factory=list)
 
 
 def normalise(text: str) -> str:
@@ -73,7 +83,7 @@ def _word(question: str, answer: str) -> dict[str, Any]:
     return {"type": "word", "question": question, "answers": [answer]}
 
 
-def probes(seen: Observed, session: Session | None = None, cut: int = 0) -> list[dict[str, Any]]:
+def probes(seen: Observed) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     if seen.edited:
         path = seen.edited[-1]
@@ -92,22 +102,6 @@ def probes(seen: Observed, session: Session | None = None, cut: int = 0) -> list
                 "Did the agent's most recent test run pass or fail? Answer pass or fail.",
                 "pass" if seen.tests[-1] else "fail",
             )
-        )
-    following = next_action(session, cut) if session is not None else None
-    if following is not None:
-        kind, path = following
-        found.append(
-            {
-                "type": "next_step",
-                "question": (
-                    "What will the agent most likely do next? Answer with one of read, edit, "
-                    "test, run, install or other, followed by the file it will touch, if any."
-                ),
-                "answers": {
-                    "kind": kind,
-                    "file": sorted({normalise(a) for a in (path, path.rsplit("/", 1)[-1]) if a}),
-                },
-            }
         )
     if seen.created:
         path = seen.created[-1]
