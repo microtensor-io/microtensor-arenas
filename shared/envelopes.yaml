@@ -1,4 +1,4 @@
-version: 5
+version: 6
 docs: https://microtensor.cloud/docs/certified-inference/system/envelope-groups
 violation_share: 0.01
 min_bits: 4
@@ -11,6 +11,7 @@ rules:
   - Image input has its own limits per class, the largest page image accepted (long side and total pixels), the pages per call and the time allowed per page. Arenas tighten them like any other limit. mt-1 is text only.
   - Classes change only through a new published version, announced before it applies.
   - A system that goes over any limit on more than 1% of items fails the envelope and scores zero for that epoch.
+  - Inputs longer than a class's long input threshold are held to its long input limits, a first token time and an end to end time, instead of the short input first token limit. Only mt-5 has them, for long context arenas.
   - Systems are also tested on the open classes below their arena's. Passing a lower class gives the edge ready flag and the edge bonus in the SLM score.
 measurement:
   - mt-1, mt-2 and mt-3 run llama.cpp with GGUF weights on CPU, with a fixed thread count and a cgroups memory cap. mt-1 runs on an ARM instance with 2 threads and 1 GB so it behaves like a budget phone, mt-2 on the same ARM instance with 4 threads and 2 GB, and mt-3 on x86 with 8 threads and 4 GB.
@@ -19,6 +20,7 @@ measurement:
   - Speed is the p95 across the full hidden eval set at concurrency 1.
   - First token time includes reading the whole input, and the whole page image when there is one.
   - Page time is the wall time from the image arriving to the last output token, p95 across the hidden set at concurrency 1. Image limits are estimates until the first page parsing benchmark.
+  - End to end time is the wall time from the request arriving to the last output token, p95 across the long input items at concurrency 1.
   - Memory is the peak during the run, including the KV cache and the vision encoder.
   - The CPU numbers are spot checked against a few real phones before a class opens and after any new version.
 groups:
@@ -111,10 +113,11 @@ groups:
     precision: [bf16, fp16, awq, gptq]
     parameters: {max: 8000000000}
     memory_gb: 24
-    max_input_tokens: 32768
+    max_input_tokens: 131072
     max_output_tokens: 4096
     ttft_p95_ms: 4000
     tpot_p95_ms: 60
+    long_input: {above_tokens: 32768, ttft_p95_ms: 30000, e2e_p95_ms: 90000}
     image: {max_long_side_px: 2048, max_pixels: 3145728, pages_per_call: 1, page_time_p95_ms: 15000}
     reference: {gpus: 1, memory_gb: 24, machine: named after the benchmark}
     serving_class: gpu_24gb

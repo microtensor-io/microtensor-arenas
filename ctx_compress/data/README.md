@@ -1,10 +1,10 @@
 # Dataset
 
-[nebius/SWE-agent-trajectories](https://huggingface.co/datasets/nebius/SWE-agent-trajectories)
+[microtensor/agent-sessions](https://huggingface.co/datasets/microtensor/agent-sessions)
 
-Licence: CC BY 4.0
+Licence: Microtensor dataset terms
 
-Dev split only; hidden items never go in the repo. 80,036 SWE-agent trajectories written by Llama 3.1 70B. The card says use of those outputs follows the Llama 3.1 licence, so a distributed model trained on them must start its name with "Llama" and show "Built with Llama".
+Our own corpus of coding agent sessions on permissively licensed repository tasks, recorded through a tap and stripped by the canonical renderer. The dev split is public, 2,000 sessions at launch; the hidden split never leaves validators. Codex sessions join in v2.1.
 
 Build dev items in the arena's exact format from it with
 

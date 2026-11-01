@@ -63,6 +63,15 @@ def limit_row(key: str, value: Any, device: str) -> list[str]:
         return ["Page image", ", ".join(parts)]
     if key == "memory_gb":
         return ["GPU memory" if device == "gpu" else "Peak memory", f"≤ {value:g} GB"]
+    if key == "long_input":
+        parts = []
+        if "ttft_p95_ms" in value:
+            parts.append(f"first token ≤ {value['ttft_p95_ms'] / 1000:g} s")
+        if "e2e_p95_ms" in value:
+            parts.append(f"end to end ≤ {value['e2e_p95_ms'] / 1000:g} s")
+        above = value.get("above_tokens")
+        lead = f"inputs over {_int(above)} tokens: " if above else ""
+        return ["Long input (p95)", lead + ", ".join(parts)]
     name, template = LIMIT_ROWS[key]
     return [name, template.format(value)]
 
@@ -261,7 +270,12 @@ def _grader(block: dict[str, Any]) -> str:
     if block["grader_type"] == "model_assisted" and probe:
         text += (
             f", probe `{probe['model']}` {probe['file']} at `{probe['revision'][:12]}`, "
-            f"{probe['max_tokens']} tokens, on the validator's CPU"
+            + (
+                f"{_int(probe['max_input_tokens'])} token input, "
+                if probe.get("max_input_tokens")
+                else ""
+            )
+            + f"{probe['max_tokens']} token answers, on the validator's CPU"
         )
     return text
 
@@ -291,6 +305,25 @@ def _evaluation(arena: dict[str, Any]) -> dict[str, Any]:
                     f"match on the miner's profile; about {spot['validators_per_miner']} "
                     f"validators per miner; {spot['reference_calls']} reference calls timed on "
                     "the same card"
+                ),
+            ]
+        )
+    if "resume" in block:
+        resume = block["resume"]
+        agent = resume.get("agent")
+        rows.append(
+            [
+                "Resume test",
+                (
+                    f"{resume['items']} sampled hidden items per paid miner, resumed from the "
+                    "miner's summary with the pinned reference agent through the relay; the gate "
+                    f"holds if LB(resume pass) ≥ reference agent pass − {resume['margin']:g}, "
+                    "otherwise the SLM score is 0 for the epoch; "
+                    + (
+                        f"agent `{agent['image']}` on `{agent['model']}`"
+                        if agent
+                        else "the agent is pinned before the gate applies"
+                    )
                 ),
             ]
         )

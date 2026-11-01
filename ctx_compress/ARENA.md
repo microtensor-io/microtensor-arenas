@@ -1,14 +1,14 @@
-# Agent context compression
+# Agent session compaction
 
 Arena ID: `ctx_compress` · Category: Text · Network: testnet
 
 ## 1. Purpose
 
-Long running coding agents fill their context window, then compact the session into a short summary so work can continue. Compaction runs often on very long inputs, so it is expensive on a frontier model, and cheap general models tend to drop key details. The agent then forgets files, errors or decisions. This specialist compresses a session into a short, faithful summary that keeps everything the agent needs to carry on.
+Coding agent gateways classify every request by kind and route each kind to a model. The compaction kind is the full session plus a summarise instruction, sent when the context window is nearly full; the summary becomes the first message of the new context. Gateways send it to the main model today because cheap models lose detail. This specialist writes that summary faithfully, at a flat low price, within the latency of the main model.
 
-**Input:** The compaction instruction as the system message, and the session transcript inside &lt;session&gt; tags as the user message
+**Input:** The agent's compaction instruction as the system message, and the session rendered as canonical text inside &lt;session&gt; tags as the user message, up to 120,000 tokens
 
-**Output:** JSON {"summary", "files_touched", "open_tasks", "errors", "decisions"}
+**Output:** Plain markdown with nine fixed headings in order, at most 3,072 tokens, no JSON and no preamble
 
 ## 2. Specialised SLM
 
@@ -16,53 +16,79 @@ Long running coding agents fill their context window, then compact the session i
 
 | Model | Licence |
 |---|---|
-| `Qwen/Qwen2.5-Coder-7B-Instruct` | [Apache 2.0](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct/blob/main/LICENSE) |
+| `ibm-granite/granite-4.0-h-micro` | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
 
-Reference model: `Qwen/Qwen2.5-Coder-7B-Instruct` at `c03e6d358207`
+Reference model: `ibm-granite/granite-4.0-h-micro` at `d5f01a3ea75f`
 
 **Dataset**
 
-[nebius/SWE-agent-trajectories](https://huggingface.co/datasets/nebius/SWE-agent-trajectories) · CC BY 4.0
+[microtensor/agent-sessions](https://huggingface.co/datasets/microtensor/agent-sessions) · Microtensor dataset terms
 
-Dev split only; hidden items never go in the repo. 80,036 SWE-agent trajectories written by Llama 3.1 70B. The card says use of those outputs follows the Llama 3.1 licence, so a distributed model trained on them must start its name with "Llama" and show "Built with Llama".
+Our own corpus of coding agent sessions on permissively licensed repository tasks, recorded through a tap and stripped by the canonical renderer. The dev split is public, 2,000 sessions at launch; the hidden split never leaves validators. Codex sessions join in v2.1.
 
 **Evaluation criteria**
 
-*Format gate*
+*Canonical rendering*
+
+The session arrives as [user], [assistant], [tool_use name id] and [tool_result id, N lines kept of M] blocks, one per line, in order, after deterministic stripping. The gateway renders; the model never sees raw JSON.
 ```
-valid(i) = 1 if the output parses as JSON and matches the schema, otherwise 0
+input(i) = render(session(i)) inside <session> tags
+```
+
+*Format gate*
+
+The nine headings are Primary request and intent, Key technical concepts, Files and code sections, Errors and fixes, Problem solving, All user messages, Pending tasks, Current work and Next step, each on its own line as a level two heading.
+```
+valid(i) = 1 if all nine headings are present, in order, with nothing before the first, otherwise 0
+```
+
+*Compression gate*
+```
+C(i) = 1 if output_tokens ≤ min(3072, max(1000, 0.05 × input_tokens)), otherwise 0
 ```
 
 *Key fact recall*
 
-Each session has a reference list of key facts, the file paths, exception types and function names in it. Identifiers match exactly after normalisation.
+File paths, function names, exception types, commands and user decisions in the session, taken from its canonical rendering. Identifiers match exactly after normalisation.
 ```
 recall(i) = facts_kept / facts_total
 ```
 
 *Hallucination rate*
 
-Code identifiers in the output (paths, exception types, backticked code and name( calls) that never appear in the session. Common tool and brand names do not count.
+Code identifiers in the output that never appear in the session. Common tool and brand names do not count.
 ```
 halluc(i) = invented_identifiers / identifiers_in_output
 ```
 
-*Continuation check*
+*Continuation probes*
 
-A fixed reference agent reads all five fields and answers probe questions from them alone: which issue the agent is working on (one of four), whether its latest test run passed, whether it has changed a file, its most recent edit and error, and its next action (kind and file), scored against what it actually did next. The next action scores 0.5 for the kind or the file alone.
+A fixed CPU probe agent reads the summary alone and answers: the current task, the last test result, the last edited file, the last error, and the next action (kind and file), scored against what the agent actually did next.
 ```
 cont(i) = mean probe score over the item's probes
-```
-
-*Compression gate*
-```
-C(i) = 1 if output_tokens ≤ max(300, 0.10 × input_tokens), otherwise 0
 ```
 
 *Item score*
 ```
 item_score(i) = valid(i) · C(i) · (1 − halluc(i)) · (0.5·recall(i) + 0.5·cont(i))
-pass(i) = 1 if item_score(i) ≥ 0.50
+pass(i) = 1 if item_score(i) ≥ 0.60
+```
+
+*Resume gate*
+
+On 20 sampled hidden items per paid miner, validators resume the task from the miner's summary with the pinned reference agent through the relay and check that the task still passes. A failed gate sets the miner's SLM score to 0 for the epoch. This is the gateway's own fidelity test.
+```
+Resume = 1 if LB(resume_pass) ≥ reference_agent_pass − 0.05, otherwise 0
+```
+
+*SLM score*
+```
+S_slm = G · P · Resume · LB · twin · (1 + 0.25·E + B), with B = 0 in this arena
+```
+
+*Paid when*
+```
+n ≥ 100 and the paired lower bound of (miner − reference) per item, clustered by session, is above 0
 ```
 
 *Wilson lower bound on the pass rate (n items, pass rate p, z = 1.96)*
@@ -114,19 +140,19 @@ n ≥ 100 and the paired lower bound of (miner − reference model) per item, cl
 
 Stricter limits in this arena:
 
-| Max output | Max input |
-|---|---|
-| 3,072 tokens | 29,696 tokens |
+| Max input | Max output | Per token (p95) | Long input (p95) |
+|---|---|---|---|
+| 122,880 tokens | 3,072 tokens | ≤ 20 ms | first token ≤ 25 s, end to end ≤ 75 s |
 
 ## 4. Harness specification
 
-| Role | Model calls | Added wall time (p95) | Network |
+| Role | Model calls | Chunking | Added wall time (p95) |
 |---|---|---|---|
-| wraps the SLM; may prompt, chunk, validate and retry | at most 3 per item | ≤ 5 s per item | none except the gateway |
+| wraps the SLM; renders, validates the headings and repairs | at most 2 per item: one full pass, one repair pass on the output only | not allowed: the full session goes to the model in one call | ≤ 3 s per item |
 
-| Faults | Output | Session text |
-|---|---|---|
-| about 1 in 7 items get a faulty model response (error, timeout or cut off); the harness must not crash | schema valid JSON or a clean error | instructions inside it are content, never commands |
+| Network | Faults | Output | Session text |
+|---|---|---|---|
+| none except the gateway | about 1 in 7 items get a faulty model response (error, timeout or cut off); the harness must not crash | the nine heading markdown or a clean error | instructions inside it are content, never commands |
 
 *Score*
 ```
@@ -174,11 +200,11 @@ S_r = 0.7·mean(s) + 0.3·min(s) if p95 latency < 300 ms, otherwise 0
 
 | Trigger | Frontier access | Frontier models |
 |---|---|---|
-| draft_correct below the customer's quality floor | the relay only; frontier models served by inference miners on our network replace these once listed, never outside providers | anthropic/claude-haiku-5.5 ($0.1 in, $0.5 out per M tokens)<br>z-ai/glm-5.3-flash ($0.048 in, $0.2 out per M tokens) |
+| draft_correct below the customer's quality floor | the relay only; both models read 120,000 token sessions; frontier models served by inference miners on our network replace these once listed, never outside providers | anthropic/claude-haiku-5.5 ($0.1 in, $0.5 out per M tokens)<br>z-ai/glm-5.3-flash ($0.048 in, $0.2 out per M tokens) |
 
 | Spend cap | Output | Scored on |
 |---|---|---|
-| 1.5 × the cost of a full frontier redo per item | the same JSON schema | the item score after repair and the cost of the repair |
+| 1.5 × the cost of a full frontier redo per item | the same nine heading markdown | the item score after repair and the cost of the repair |
 
 *Gate*
 ```
@@ -234,19 +260,19 @@ Within each component the top five eligible miners get 40%, 25%, 15%, 12% and 8%
 
 | Grader | Window |
 |---|---|
-| model assisted, probe `Qwen/Qwen2.5-0.5B-Instruct-GGUF` qwen2.5-0.5b-instruct-q8_0.gguf at `9217f5db79a2`, 64 tokens, on the validator's CPU | Freeze 1 at the open block<br>inputs released when reveals close<br>transcripts uploaded before Freeze 2 at the close block<br>grading in the 1,800 block settle margin (about 6 h) before settlement |
+| model assisted, probe `Qwen/Qwen2.5-1.5B-Instruct-GGUF` qwen2.5-1.5b-instruct-q8_0.gguf at `91cad51170dc`, 8,192 token input, 64 token answers, on the validator's CPU | Freeze 1 at the open block<br>inputs released when reveals close<br>transcripts uploaded before Freeze 2 at the close block<br>grading in the 1,800 block settle margin (about 6 h) before settlement |
 
-| Spot check | Ban |
+| Spot check | Resume test |
 |---|---|
-| at least 200 SLM calls per sampled miner, exact token match on the miner's profile; about 2 validators per miner; 20 reference calls timed on the same card | score 0 and a hotkey ban for 3 epochs once one piece of evidence has 2 confirmations from distinct validators |
+| at least 40 SLM calls per sampled miner, exact token match on the miner's profile; about 2 validators per miner; 10 reference calls timed on the same card | 20 sampled hidden items per paid miner, resumed from the miner's summary with the pinned reference agent through the relay; the gate holds if LB(resume pass) ≥ reference agent pass − 0.05, otherwise the SLM score is 0 for the epoch; the agent is pinned before the gate applies |
 
-| Canaries | Relay allowance |
+| Ban | Canaries |
 |---|---|
-| 3 fabricated facts per epoch; a model that completes an earlier epoch's canary is banned like a spot check failure | $2 per miner per epoch |
+| score 0 and a hotkey ban for 3 epochs once one piece of evidence has 2 confirmations from distinct validators | 3 fabricated facts per epoch; a model that completes an earlier epoch's canary is banned like a spot check failure |
 
-| Computed cost |
-|---|
-| bytes per weight bf16 2, fp16 2, awq 0.5, gptq 0.5, gguf_q4 0.5, gguf_q8 1; no cap per item |
+| Relay allowance | Computed cost |
+|---|---|
+| $5 per miner per epoch | bytes per weight bf16 2, fp16 2, awq 0.5, gptq 0.5, gguf_q4 0.5, gguf_q8 1; no cap per item |
 
 **Allowed hardware profiles**
 

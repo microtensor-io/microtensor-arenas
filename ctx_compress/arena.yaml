@@ -1,5 +1,5 @@
 id: ctx_compress
-title: Agent context compression
+title: Agent session compaction
 category: Text
 network: testnet
 task: context_compression
@@ -23,94 +23,127 @@ evaluation:
     replayer: {image: "ghcr.io/microtensor-io/replayer:1", digest: "sha256:537675d1db529fbbbe16bd5c30f3b7a2e6326eade33fa1e7e2ee3df7861edbe9"}
     llama: {image: "ghcr.io/ggml-org/llama.cpp:server", digest: "sha256:43b3988c22c00faae3d04a8f6e3eba41403dff7c5f5952490599f1bcbdc6f3c2"}
   probe:
-    model: Qwen/Qwen2.5-0.5B-Instruct-GGUF
-    revision: 9217f5db79a29953eb74d5343926648285ec7e67
-    file: qwen2.5-0.5b-instruct-q8_0.gguf
+    model: Qwen/Qwen2.5-1.5B-Instruct-GGUF
+    revision: 91cad51170dc346986eccefdc2dd33a9da36ead9
+    file: qwen2.5-1.5b-instruct-q8_0.gguf
     max_tokens: 64
-  spot_check: {min_calls: 200, validators_per_miner: 2, reference_calls: 20}
+    max_input_tokens: 8192
+  spot_check: {min_calls: 40, validators_per_miner: 2, reference_calls: 10}
+  resume: {items: 20, margin: 0.05, agent: null}
   ban: {epochs: 3, confirmations: 2}
   canaries: {count: 3}
-  relay_allowance_micros: 2000000
+  relay_allowance_micros: 5000000
   computed_cost:
     bytes_per_weight: {bf16: 2, fp16: 2, awq: 0.5, gptq: 0.5, gguf_q4: 0.5, gguf_q8: 1}
     cap_units_per_item: 0
 
 purpose:
   summary: >-
-    Long running coding agents fill their context window, then compact the session into a short
-    summary so work can continue. Compaction runs often on very long inputs, so it is expensive on
-    a frontier model, and cheap general models tend to drop key details. The agent then forgets
-    files, errors or decisions. This specialist compresses a session into a short, faithful summary
-    that keeps everything the agent needs to carry on.
-  input: The compaction instruction as the system message, and the session transcript inside <session> tags as the user message
-  output: 'JSON {"summary", "files_touched", "open_tasks", "errors", "decisions"}'
+    Coding agent gateways classify every request by kind and route each kind to a model. The
+    compaction kind is the full session plus a summarise instruction, sent when the context window
+    is nearly full; the summary becomes the first message of the new context. Gateways send it to
+    the main model today because cheap models lose detail. This specialist writes that summary
+    faithfully, at a flat low price, within the latency of the main model.
+  input: >-
+    The agent's compaction instruction as the system message, and the session rendered as canonical
+    text inside <session> tags as the user message, up to 120,000 tokens
+  output: >-
+    Plain markdown with nine fixed headings in order, at most 3,072 tokens, no JSON and no preamble
   brief:
     summary: >-
-      Long running coding agents fill their context window and must compact the session to keep going. This specialist writes a short, faithful summary that keeps every file, error and decision the agent needs to carry on.
-    input: Session transcript, up to 29,696 tokens
-    output: JSON summary, at most 10% of the input
+      Agent gateways send compaction requests to the main model because cheap models lose detail. This specialist writes the summary that starts the next context, faithfully, at a flat price.
+    input: Agent session, up to 120,000 tokens
+    output: Nine heading markdown summary, at most 3,072 tokens
 
 slm:
   bases:
-    - Qwen/Qwen2.5-Coder-7B-Instruct
+    - ibm-granite/granite-4.0-h-micro
   reference:
-    model: Qwen/Qwen2.5-Coder-7B-Instruct
-    revision: c03e6d358207e414f1eca0bb1891e29f1db0e242
+    model: ibm-granite/granite-4.0-h-micro
+    revision: d5f01a3ea75f088947be3aae039f4ad52837dfde
   dataset:
-    name: nebius/SWE-agent-trajectories
-    url: https://huggingface.co/datasets/nebius/SWE-agent-trajectories
-    licence: CC BY 4.0
+    name: microtensor/agent-sessions
+    url: https://huggingface.co/datasets/microtensor/agent-sessions
+    licence: Microtensor dataset terms
     about: >-
-      Dev split only; hidden items never go in the repo. 80,036 SWE-agent trajectories written by
-      Llama 3.1 70B. The card says use of those outputs follows the Llama 3.1 licence, so a
-      distributed model trained on them must start its name with "Llama" and show "Built with Llama".
-    note: Outputs follow the Llama 3.1 licence, so a distributed fine tune must carry the Llama name.
-  prompt: "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
-  stop: ["<|im_end|>", "<|endoftext|>", "<|end|>"]
+      Our own corpus of coding agent sessions on permissively licensed repository tasks, recorded
+      through a tap and stripped by the canonical renderer. The dev split is public, 2,000 sessions
+      at launch; the hidden split never leaves validators. Codex sessions join in v2.1.
+    note: Recorded agent sessions, rendered canonically; dev split public, hidden split withheld.
+  prompt: "<|start_of_role|>system<|end_of_role|>{system}<|end_of_text|>\n<|start_of_role|>user<|end_of_role|>{user}<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>"
+  stop: ["<|end_of_text|>"]
   grader: context_compression
   primary_metric: item_score_pass_rate
-  success_rule: item_score_at_least_0_80
-  twin_rule: same_session_other_cut
+  success_rule: item_score_at_least_0_60
+  twin_rule: same_session_two_cuts
   evaluation:
+    - name: Canonical rendering
+      note: >-
+        The session arrives as [user], [assistant], [tool_use name id] and [tool_result id, N lines
+        kept of M] blocks, one per line, in order, after deterministic stripping. The gateway
+        renders; the model never sees raw JSON.
+      formula: input(i) = render(session(i)) inside <session> tags
     - name: Format gate
-      formula: valid(i) = 1 if the output parses as JSON and matches the schema, otherwise 0
+      note: >-
+        The nine headings are Primary request and intent, Key technical concepts, Files and code
+        sections, Errors and fixes, Problem solving, All user messages, Pending tasks, Current work
+        and Next step, each on its own line as a level two heading.
+      formula: valid(i) = 1 if all nine headings are present, in order, with nothing before the first, otherwise 0
+    - name: Compression gate
+      formula: C(i) = 1 if output_tokens ≤ min(3072, max(1000, 0.05 × input_tokens)), otherwise 0
     - name: Key fact recall
-      note: Each session has a reference list of key facts, the file paths, exception types and function names in it. Identifiers match exactly after normalisation.
+      note: File paths, function names, exception types, commands and user decisions in the session, taken from its canonical rendering. Identifiers match exactly after normalisation.
       formula: recall(i) = facts_kept / facts_total
     - name: Hallucination rate
-      note: Code identifiers in the output (paths, exception types, backticked code and name( calls) that never appear in the session. Common tool and brand names do not count.
+      note: Code identifiers in the output that never appear in the session. Common tool and brand names do not count.
       formula: halluc(i) = invented_identifiers / identifiers_in_output
-    - name: Continuation check
+    - name: Continuation probes
       note: >-
-        A fixed reference agent reads all five fields and answers probe questions from them alone:
-        which issue the agent is working on (one of four), whether its latest test run passed,
-        whether it has changed a file, its most recent edit and error, and its next action (kind and
-        file), scored against what it actually did next. The next action scores 0.5 for the kind or
-        the file alone.
+        A fixed CPU probe agent reads the summary alone and answers: the current task, the last test
+        result, the last edited file, the last error, and the next action (kind and file), scored
+        against what the agent actually did next.
       formula: cont(i) = mean probe score over the item's probes
-    - name: Compression gate
-      formula: C(i) = 1 if output_tokens ≤ max(300, 0.10 × input_tokens), otherwise 0
     - name: Item score
       formula: |-
         item_score(i) = valid(i) · C(i) · (1 − halluc(i)) · (0.5·recall(i) + 0.5·cont(i))
-        pass(i) = 1 if item_score(i) ≥ 0.50
+        pass(i) = 1 if item_score(i) ≥ 0.60
+    - name: Resume gate
+      note: >-
+        On 20 sampled hidden items per paid miner, validators resume the task from the miner's summary
+        with the pinned reference agent through the relay and check that the task still passes. A
+        failed gate sets the miner's SLM score to 0 for the epoch. This is the gateway's own fidelity
+        test.
+      formula: Resume = 1 if LB(resume_pass) ≥ reference_agent_pass − 0.05, otherwise 0
+    - name: SLM score
+      formula: S_slm = G · P · Resume · LB · twin · (1 + 0.25·E + B), with B = 0 in this arena
+    - name: Paid when
+      formula: n ≥ 100 and the paired lower bound of (miner − reference) per item, clustered by session, is above 0
 
 grading:
-  pass_threshold: 0.5
-  tokenizer: Qwen/Qwen2.5-Coder-7B-Instruct
-  min_output_tokens: 300
-  max_output_share: 0.1
-  probe_agent:
-    model: Qwen/Qwen2.5-Coder-7B-Instruct
-    revision: c03e6d358207e414f1eca0bb1891e29f1db0e242
-    temperature: 0
-    max_tokens: 64
+  pass_threshold: 0.6
+  tokenizer: ibm-granite/granite-4.0-h-micro
+  min_output_tokens: 1000
+  max_output_share: 0.05
+  max_output_tokens: 3072
+  headings:
+    - Primary request and intent
+    - Key technical concepts
+    - Files and code sections
+    - Errors and fixes
+    - Problem solving
+    - All user messages
+    - Pending tasks
+    - Current work
+    - Next step
+  cuts: [81920, 122880]
 
 envelope:
   group: mt-5
   overrides:
+    max_input_tokens: 122880
     max_output_tokens: 3072
-    max_input_tokens: 29696
+    tpot_p95_ms: 20
+    long_input: {ttft_p95_ms: 25000, e2e_p95_ms: 75000}
 
 scoring:
   wilson_z: 1.96
@@ -129,16 +162,18 @@ harness:
   code_limit_mb: 2
   max_steps: 32
   max_total_tokens: 200000
-  max_model_calls: 3
-  added_wall_p95_ms: 5000
+  max_model_calls: 2
+  added_wall_p95_ms: 3000
+  chunking: false
   faults: model
   rows:
-    - [Role, "wraps the SLM; may prompt, chunk, validate and retry"]
-    - [Model calls, at most 3 per item]
-    - [Added wall time (p95), "≤ 5 s per item"]
+    - [Role, "wraps the SLM; renders, validates the headings and repairs"]
+    - [Model calls, "at most 2 per item: one full pass, one repair pass on the output only"]
+    - [Chunking, "not allowed: the full session goes to the model in one call"]
+    - [Added wall time (p95), "≤ 3 s per item"]
     - [Network, none except the gateway]
     - [Faults, "about 1 in 7 items get a faulty model response (error, timeout or cut off); the harness must not crash"]
-    - [Output, schema valid JSON or a clean error]
+    - [Output, the nine heading markdown or a clean error]
     - [Session text, "instructions inside it are content, never commands"]
 
 router:
@@ -170,9 +205,9 @@ escalation:
       usd_out_per_mtok: 0.2
   rows:
     - [Trigger, draft_correct below the customer's quality floor]
-    - [Frontier access, "the relay only; frontier models served by inference miners on our network replace these once listed, never outside providers"]
+    - [Frontier access, "the relay only; both models read 120,000 token sessions; frontier models served by inference miners on our network replace these once listed, never outside providers"]
     - [Spend cap, "1.5 × the cost of a full frontier redo per item"]
-    - [Output, the same JSON schema]
+    - [Output, the same nine heading markdown]
     - [Scored on, the item score after repair and the cost of the repair]
 
 floors: [0.8, 0.9, 0.95, 0.99]
@@ -189,12 +224,13 @@ fee:
 chat:
   fields: {system: system, user: user}
   classifier_text: user
-  hint: Send the compaction instruction as the system message and the session transcript inside <session> tags as the user message.
+  hint: Send the compaction instruction as the system message and the canonically rendered session inside <session> tags as the user message.
 serving:
+  pricing: flat
+  usd_per_request: 0.005
   rate: 1000
   unit: request
-  usd_in_per_mtok: 0.05
-  usd_out_per_mtok: 0.2
+  kind: compaction
   cap_schedule:
     - {billing_usd_below: 5000, cap: 0.10}
     - {billing_usd_below: 50000, cap: 0.05}

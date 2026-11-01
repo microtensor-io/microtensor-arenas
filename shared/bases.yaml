@@ -1,4 +1,4 @@
-version: 4
+version: 5
 checked: 2026-10-30
 bases:
   - model: Qwen/Qwen2.5-0.5B-Instruct
@@ -33,6 +33,14 @@ bases:
     parameters: 7615616512
     gated: false
     groups: [mt-4, mt-5]
+  - model: ibm-granite/granite-4.0-h-micro
+    revision: d5f01a3ea75f088947be3aae039f4ad52837dfde
+    licence: apache-2.0
+    licence_name: Apache 2.0
+    licence_url: https://www.apache.org/licenses/LICENSE-2.0
+    parameters: 3191396096
+    gated: false
+    groups: [mt-5]
   - model: meta-llama/Llama-3.2-1B-Instruct
     revision: 9213176726f574b556790deb65791e0c5aa438b6
     licence: llama3.2
