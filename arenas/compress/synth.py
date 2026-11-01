@@ -15,8 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DEV_TOKENS = (30_000, 100_000)
-HIDDEN_TOKENS = (60_000, 120_000)
+DEV_TOKENS = (12_000, 95_000)
+HIDDEN_TOKENS = (35_000, 95_000)
 DOMAINS = {
     "billing": (
         ["invoice", "ledger", "payout", "refund", "tariff", "receipt", "balance", "credit"],
