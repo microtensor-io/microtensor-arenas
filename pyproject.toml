@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "microtensor-arenas"
-version = "0.2.0"
+version = "0.3.0"
 description = "Microtensor arena definitions, the shared envelope groups and base list, and dev item builders"
 requires-python = ">=3.10"
 dependencies = ["pyyaml>=6.0"]
 
 [project.optional-dependencies]
-compress = ["huggingface-hub>=0.24", "pyarrow>=15", "tokenizers>=0.19"]
+compress = ["huggingface-hub>=0.24", "pyarrow>=15", "tokenizers>=0.19", "pytest>=8"]
 
 [project.scripts]
 mta = "arenas.cli:main"
@@ -21,6 +21,9 @@ include = ["arenas*"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint.per-file-ignores]
+"arenas/compress/synth.py" = ["S102", "BLE001"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
