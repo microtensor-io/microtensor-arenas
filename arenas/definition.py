@@ -29,6 +29,7 @@ EVALUATION_KEYS = (
     "relay_allowance_micros",
     "computed_cost",
 )
+OPTIONAL_EVALUATION_KEYS = ("resume",)
 MINER_SETTLE_MARGIN = 1800
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 REVISION = re.compile(r"^[0-9a-f]{40}$")
@@ -152,7 +153,12 @@ def _images(value: Any, *, complete: bool) -> None:
 def _probe(value: Any) -> None:
     where = "evaluation.probe"
     block = _mapping(value, where)
-    _exact(block, ("model", "revision", "file", "max_tokens"), where)
+    for key in block:
+        if key not in ("model", "revision", "file", "max_tokens", "max_input_tokens"):
+            raise ValueError(f"unknown key {key!r} in {where}")
+    for key in ("model", "revision", "file", "max_tokens"):
+        if key not in block:
+            raise ValueError(f"{where}.{key} is required")
     if not isinstance(block["model"], str) or "/" not in block["model"]:
         raise ValueError(f"{where}.model must be a Hugging Face repository id")
     if not isinstance(block["revision"], str) or not REVISION.match(block["revision"]):
@@ -160,6 +166,26 @@ def _probe(value: Any) -> None:
     if not isinstance(block["file"], str) or not block["file"].endswith(".gguf"):
         raise ValueError(f"{where}.file must name a .gguf file")
     _positive(block, "max_tokens", where)
+    if "max_input_tokens" in block:
+        _positive(block, "max_input_tokens", where)
+
+
+def _resume(value: Any) -> None:
+    where = "evaluation.resume"
+    block = _mapping(value, where)
+    _exact(block, ("items", "margin", "agent"), where)
+    _positive(block, "items", where)
+    margin = block["margin"]
+    if isinstance(margin, bool) or not isinstance(margin, int | float) or not 0 <= margin < 1:
+        raise ValueError(f"{where}.margin must be a fraction")
+    agent = block["agent"]
+    if agent is None:
+        return
+    agent = _mapping(agent, f"{where}.agent")
+    _exact(agent, ("image", "digest", "model"), f"{where}.agent")
+    _image("resume_agent", {"image": agent["image"], "digest": agent["digest"]})
+    if not isinstance(agent["model"], str) or not agent["model"]:
+        raise ValueError(f"{where}.agent.model names the relay model the agent runs on")
 
 
 def _counts(value: Any, keys: tuple[str, ...], where: str) -> None:
@@ -187,7 +213,7 @@ def evaluation(arena: dict[str, Any]) -> dict[str, Any] | None:
         return None
     block = _mapping(arena["evaluation"], "evaluation")
     for key in block:
-        if key not in EVALUATION_KEYS:
+        if key not in EVALUATION_KEYS and key not in OPTIONAL_EVALUATION_KEYS:
             raise ValueError(f"unknown key {key!r} in evaluation")
     mode = block.get("mode")
     if mode not in EVALUATION_MODES:
@@ -221,6 +247,8 @@ def evaluation(arena: dict[str, Any]) -> dict[str, Any] | None:
         _counts(block["canaries"], ("count",), "evaluation.canaries")
     if "relay_allowance_micros" in block:
         _positive(block, "relay_allowance_micros", "evaluation")
+    if "resume" in block:
+        _resume(block["resume"])
     if "computed_cost" in block:
         _computed_cost(block["computed_cost"])
     return block
@@ -237,6 +265,9 @@ def scoring(arena: dict[str, Any]) -> dict[str, Any]:
 
 
 SERVING_KEYS = (
+    "pricing",
+    "usd_per_request",
+    "kind",
     "rate",
     "unit",
     "usd_in_per_mtok",
@@ -277,6 +308,17 @@ def _serving(arena: dict[str, Any]) -> dict[str, Any]:
     unknown = set(serving) - set(SERVING_KEYS)
     if unknown:
         raise ValueError(f"serving carries unknown keys: {', '.join(sorted(unknown))}")
+    pricing = serving.get("pricing", "tokens")
+    if pricing not in ("tokens", "flat"):
+        raise ValueError("serving.pricing is tokens or flat")
+    if pricing == "flat":
+        price = serving.get("usd_per_request")
+        if isinstance(price, bool) or not isinstance(price, int | float) or price <= 0:
+            raise ValueError("flat serving needs a positive usd_per_request")
+        if "usd_in_per_mtok" in serving or "usd_out_per_mtok" in serving:
+            raise ValueError("flat serving carries no token prices")
+    elif "usd_per_request" in serving:
+        raise ValueError("usd_per_request belongs to flat serving")
     if "cap_schedule" in serving:
         _schedule(serving["cap_schedule"])
     if "floor_epochs" in serving and (
