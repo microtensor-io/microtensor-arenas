@@ -6,7 +6,7 @@ task: context_compression
 aliases: [context-compression, compaction, compact]
 timing:
   epoch_blocks: 50400
-  commit_blocks: 14400
+  commit_blocks: 21600
   settle_margin: 1800
 
 evaluation:
