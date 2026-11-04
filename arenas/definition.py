@@ -481,7 +481,7 @@ def relay_catalog(arena_id: str = ARENA_ID) -> list[dict[str, Any]]:
             "provider_model": b["version"],
             "usd_in_per_mtok": b["usd_in_per_mtok"],
             "usd_out_per_mtok": b["usd_out_per_mtok"],
-            "max_tokens": 1024,
+            "max_tokens": 3072,
         }
         for b in load(arena_id)["escalation"]["frontier"]
     ]

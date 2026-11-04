@@ -17,12 +17,15 @@ LADDER_STEP = 0.01
 COMPONENTS = ("Specialised SLM", "Harness", "Router", "Escalation repair", "Full system")
 WEIGHT_NAMES = {"ttft": "TTFT", "memory": "mem", "parameters": "N", "tpot": "TPOT"}
 BLOCKS_PER_HOUR = 300
+MAX_UPLOADS = 3
+SAMPLE_BLOCKS = 10
+TIMED_CALLS = 10
 GRADERS = {"pure_cpu": "pure CPU", "model_assisted": "model assisted"}
 LIMIT_ROWS = {
     "max_input_tokens": ("Max input", "{:,} tokens"),
     "max_output_tokens": ("Max output", "{:,} tokens"),
-    "ttft_p95_ms": ("First token (p95)", "≤ {:,} ms"),
-    "tpot_p95_ms": ("Per token (p95)", "≤ {:,} ms"),
+    "ttft_p95_ms": ("First token", "≤ {:,} ms"),
+    "tpot_p95_ms": ("Per token", "≤ {:,} ms"),
     "min_tokens_per_s": ("Generation", "≥ {:g} tokens/s"),
 }
 
@@ -71,7 +74,7 @@ def limit_row(key: str, value: Any, device: str) -> list[str]:
             parts.append(f"end to end ≤ {value['e2e_p95_ms'] / 1000:g} s")
         above = value.get("above_tokens")
         lead = f"inputs over {_int(above)} tokens: " if above else ""
-        return ["Long input (p95)", lead + ", ".join(parts)]
+        return ["Long input", lead + ", ".join(parts)]
     name, template = LIMIT_ROWS[key]
     return [name, template.format(value)]
 
@@ -112,7 +115,6 @@ def mechanism(scoring: dict[str, Any], envelope: dict[str, Any]) -> list[dict[st
         },
     ]
     if per_item:
-        share = 100 - envelope["violation_share"] * 100
         items += [
             {
                 "name": "Provenance gate",
@@ -123,7 +125,10 @@ def mechanism(scoring: dict[str, Any], envelope: dict[str, Any]) -> list[dict[st
             },
             {
                 "name": "Envelope pass",
-                "formula": f"P = 1 if within the envelope on at least {share:g}% of items, otherwise 0",
+                "formula": (
+                    "P = 1 if every call the coordinator times is within the limits for its input "
+                    "length and peak memory is within the envelope, otherwise 0"
+                ),
             },
         ]
     else:
@@ -283,10 +288,83 @@ def _grader(block: dict[str, Any]) -> str:
 def _window(timing: dict[str, Any]) -> str:
     margin = int(timing["settle_margin"])
     return (
-        "Freeze 1 at the open block · inputs released when reveals close · transcripts "
+        "Freeze 1 at the open block · inputs released after the mirror pass · transcripts "
         f"uploaded before Freeze 2 at the close block · grading in the {_int(margin)} block "
         f"settle margin (about {margin / BLOCKS_PER_HOUR:g} h) before settlement"
     )
+
+
+def _seconds(milliseconds: int) -> str:
+    return f"{milliseconds / 1000:g} s"
+
+
+def _call_limits(limits: dict[str, Any]) -> str:
+    first = f"first token ≤ {_seconds(limits['ttft_p95_ms'])}"
+    held = limits.get("long_input") or {}
+    above = held.get("above_tokens", 0)
+    if above and limits["max_input_tokens"] > above:
+        first += (
+            f" up to {_int(above)} input tokens; above that first token ≤ "
+            f"{_seconds(held['ttft_p95_ms'])} and end to end ≤ {_seconds(held['e2e_p95_ms'])}"
+        )
+    speed = (
+        f"per token ≤ {_int(limits['tpot_p95_ms'])} ms"
+        if "tpot_p95_ms" in limits
+        else f"generation ≥ {limits['min_tokens_per_s']:g} tokens/s"
+    )
+    return f"{first}; {speed}"
+
+
+def _spot_rows(spot: dict[str, Any], limits: dict[str, Any]) -> list[list[str]]:
+    calls = spot["min_calls"]
+    return [
+        [
+            "Spot check",
+            (
+                f"the coordinator, run by the subnet owner, reruns {_int(calls)} SLM calls per "
+                "miner on the miner's profile and requires an exact token match; the calls are "
+                "drawn from those that did not fault, seeded by the transcript hash and the block "
+                f"hash {SAMPLE_BLOCKS} blocks after the upload; {spot['reference_calls']} "
+                "reference calls are timed on the same card once per epoch"
+            ),
+        ],
+        [
+            "Speed and memory",
+            (
+                f"on the profile card all {_int(calls)} sampled calls run one at a time and "
+                f"{TIMED_CALLS} of them, chosen by a hash of the call, are timed; every timed "
+                f"call must be within the limits for its input length: {_call_limits(limits)}; a "
+                "call over a limit is rerun once and only its second timing counts; peak memory "
+                f"≤ {limits['memory_gb']:g} GB at full context; a miner over any of these fails "
+                "the envelope"
+            ),
+        ],
+        [
+            "Evidence",
+            (
+                "a mismatch is rerun on the same card after the engine restarts; if both runs "
+                "agree with each other and differ from the miner, it goes in the coordinator's "
+                "signed report as evidence"
+            ),
+        ],
+    ]
+
+
+def _ban_rows(ban: dict[str, Any]) -> list[list[str]]:
+    return [
+        [
+            "Ban",
+            (
+                "on standing evidence validators score the miner 0 for that epoch and apply a "
+                f"{ban['epochs']} epoch hotkey ban, counting that epoch; the server never bans "
+                "directly"
+            ),
+        ],
+        [
+            "Appeal",
+            "within one epoch the miner can appeal; the flagged call is rerun and a match lifts the ban",
+        ],
+    ]
 
 
 def _evaluation(arena: dict[str, Any]) -> dict[str, Any]:
@@ -295,49 +373,32 @@ def _evaluation(arena: dict[str, Any]) -> dict[str, Any]:
     if "grader_type" in block:
         rows.append(["Grader", _grader(block)])
     rows.append(["Window", _window(arena["timing"])])
+    rows.append(
+        [
+            "Uploads",
+            (
+                f"at most {MAX_UPLOADS} per hotkey per epoch; a new upload replaces the last one "
+                "and gets a new sample"
+            ),
+        ]
+    )
     if "spot_check" in block:
-        spot = block["spot_check"]
-        rows.append(
-            [
-                "Spot check",
-                (
-                    f"at least {_int(spot['min_calls'])} SLM calls per sampled miner, exact token "
-                    f"match on the miner's profile; about {spot['validators_per_miner']} "
-                    f"validators per miner; {spot['reference_calls']} reference calls timed on "
-                    "the same card"
-                ),
-            ]
-        )
-    if "resume" in block:
-        resume = block["resume"]
-        agent = resume.get("agent")
-        rows.append(
-            [
-                "Resume test",
-                (
-                    f"{resume['items']} sampled hidden items per paid miner, resumed from the "
-                    "miner's summary with the pinned reference agent through the relay; the gate "
-                    f"holds if LB(resume pass) ≥ reference agent pass − {resume['margin']:g}, "
-                    "otherwise the SLM score is 0 for the epoch; "
-                    + (
-                        f"agent `{agent['image']}` on `{agent['model']}`"
-                        if agent
-                        else "the agent is pinned before the gate applies"
-                    )
-                ),
-            ]
-        )
+        rows += _spot_rows(block["spot_check"], arena["envelope"]["limits"])
     if "ban" in block:
-        ban = block["ban"]
-        rows.append(
-            [
-                "Ban",
-                (
-                    f"score 0 and a hotkey ban for {ban['epochs']} epochs once one piece of "
-                    f"evidence has {ban['confirmations']} confirmations from distinct validators"
-                ),
-            ]
-        )
+        rows += _ban_rows(block["ban"])
+    rows.append(
+        [
+            "Duplicates",
+            (
+                "every validator compares each part with earlier submissions before scoring, "
+                "whichever hotkey or coldkey made them; the earliest commit on chain wins, the "
+                "earlier transaction when two share a block, and a sealed commitment counts from "
+                "its sealed commit, not its reveal; a duplicated part scores 0 in its own pool "
+                "and in the full system pool for that epoch, and the miner's other parts are "
+                "still scored"
+            ),
+        ]
+    )
     if "canaries" in block:
         rows.append(
             [
@@ -466,7 +527,8 @@ def build(arena: dict[str, Any]) -> dict[str, Any]:
                     "name": "Paid when",
                     "formula": (
                         f"n ≥ {scoring['min_items']} and the 5th percentile of S_e − S_ref over "
-                        f"{RESAMPLES} family resamples is above 0"
+                        f"{RESAMPLES} family resamples is above 0; S_ref is 0, the score of a full "
+                        "frontier redo, while no reference repair is published"
                     ),
                 },
             ],
@@ -647,7 +709,7 @@ def _evaluation_section(evaluation: dict[str, Any]) -> list[str]:
             "",
             (
                 "A profile is one GPU architecture, one driver and one image digest. A miner "
-                "declares its profile in its commitment and is spot checked only by validators "
+                "declares its profile in its commitment and is spot checked by the coordinator "
                 "on the same profile."
             ),
             "",

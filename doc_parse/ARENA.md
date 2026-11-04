@@ -100,7 +100,7 @@ G = 1 if the fingerprint matches the declared base and the system beats that bas
 
 *Envelope pass*
 ```
-P = 1 if within the envelope on at least 99% of items, otherwise 0
+P = 1 if every call the coordinator times is within the limits for its input length and peak memory is within the envelope, otherwise 0
 ```
 
 *Efficiency (ref is the reference baseline, x is TTFT, memory, parameters or TPOT)*
@@ -208,7 +208,7 @@ S_e = max(0, 1 − repair_cost / redo_cost) if the gate holds, otherwise 0
 
 *Paid when*
 ```
-n ≥ 100 and the 5th percentile of S_e − S_ref over 200 family resamples is above 0
+n ≥ 100 and the 5th percentile of S_e − S_ref over 200 family resamples is above 0; S_ref is 0, the score of a full frontier redo, while no reference repair is published
 ```
 
 ## 7. Full system
@@ -250,27 +250,35 @@ Within each component the top five eligible miners get 40%, 25%, 15%, 12% and 8%
 
 | Grader | Window |
 |---|---|
-| pure CPU | Freeze 1 at the open block<br>inputs released when reveals close<br>transcripts uploaded before Freeze 2 at the close block<br>grading in the 1,800 block settle margin (about 6 h) before settlement |
+| pure CPU | Freeze 1 at the open block<br>inputs released after the mirror pass<br>transcripts uploaded before Freeze 2 at the close block<br>grading in the 1,800 block settle margin (about 6 h) before settlement |
 
-| Spot check | Ban |
+| Uploads | Spot check |
 |---|---|
-| at least 200 SLM calls per sampled miner, exact token match on the miner's profile; about 2 validators per miner; 20 reference calls timed on the same card | score 0 and a hotkey ban for 3 epochs once one piece of evidence has 2 confirmations from distinct validators |
+| at most 3 per hotkey per epoch; a new upload replaces the last one and gets a new sample | the coordinator, run by the subnet owner, reruns 200 SLM calls per miner on the miner's profile and requires an exact token match; the calls are drawn from those that did not fault, seeded by the transcript hash and the block hash 10 blocks after the upload; 20 reference calls are timed on the same card once per epoch |
 
-| Canaries | Relay allowance |
+| Speed and memory | Evidence |
 |---|---|
-| 3 fabricated facts per epoch; a model that completes an earlier epoch's canary is banned like a spot check failure | $2 per miner per epoch |
+| on the profile card all 200 sampled calls run one at a time and 10 of them, chosen by a hash of the call, are timed; every timed call must be within the limits for its input length: first token ≤ 4 s; per token ≤ 60 ms; a call over a limit is rerun once and only its second timing counts; peak memory ≤ 24 GB at full context; a miner over any of these fails the envelope | a mismatch is rerun on the same card after the engine restarts; if both runs agree with each other and differ from the miner, it goes in the coordinator's signed report as evidence |
 
-| Computed cost |
-|---|
-| bytes per weight bf16 2, fp16 2, awq 0.5, gptq 0.5, gguf_q4 0.5, gguf_q8 1; no cap per item |
+| Ban | Appeal |
+|---|---|
+| on standing evidence validators score the miner 0 for that epoch and apply a 3 epoch hotkey ban, counting that epoch; the server never bans directly | within one epoch the miner can appeal; the flagged call is rerun and a match lifts the ban |
+
+| Duplicates | Canaries |
+|---|---|
+| every validator compares each part with earlier submissions before scoring, whichever hotkey or coldkey made them; the earliest commit on chain wins, the earlier transaction when two share a block, and a sealed commitment counts from its sealed commit, not its reveal; a duplicated part scores 0 in its own pool and in the full system pool for that epoch, and the miner's other parts are still scored | 3 fabricated facts per epoch; a model that completes an earlier epoch's canary is banned like a spot check failure |
+
+| Relay allowance | Computed cost |
+|---|---|
+| $2 per miner per epoch | bytes per weight bf16 2, fp16 2, awq 0.5, gptq 0.5, gguf_q4 0.5, gguf_q8 1; no cap per item |
 
 **Allowed hardware profiles**
 
-A profile is one GPU architecture, one driver and one image digest. A miner declares its profile in its commitment and is spot checked only by validators on the same profile.
+A profile is one GPU architecture, one driver and one image digest. A miner declares its profile in its commitment and is spot checked by the coordinator on the same profile.
 
 | Profile | Name | GPUs | Precision | Batching | Status |
 |---|---|---|---|---|---|
-| P1 | Small GPU | RTX 4090 24 GB (joining: L4, L40S) | bf16 | invariant | launch |
+| P1 | Small GPU | RTX 4090 24 GB (joining: L4, L40S) | bf16 | single | launch |
 
 **Official images, pulled by digest**
 
