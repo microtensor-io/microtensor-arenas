@@ -42,7 +42,7 @@ purpose:
     compaction kind is the full session plus a summarise instruction, sent when the context window
     is nearly full; the summary becomes the first message of the new context. Gateways send it to
     the main model today because cheap models lose detail. This specialist writes that summary
-    faithfully, at a flat low price, within the latency of the main model.
+    faithfully, at a low price per token, within the latency of the main model.
   input: >-
     The agent's compaction instruction as the system message, and the session rendered as canonical
     text inside <session> tags as the user message, up to 120,000 tokens
@@ -50,7 +50,7 @@ purpose:
     Plain markdown with nine fixed headings in order, at most 3,072 tokens, no JSON and no preamble
   brief:
     summary: >-
-      Agent gateways send compaction requests to the main model because cheap models lose detail. This specialist writes the summary that starts the next context, faithfully, at a flat price.
+      Agent gateways send compaction requests to the main model because cheap models lose detail. This specialist writes the summary that starts the next context, faithfully, at a low price per token.
     input: Agent session, up to 120,000 tokens
     output: Nine heading markdown summary, at most 3,072 tokens
 
@@ -216,8 +216,9 @@ chat:
   classifier_text: user
   hint: Send the compaction instruction as the system message and the canonically rendered session inside <session> tags as the user message.
 serving:
-  pricing: flat
-  usd_per_request: 0.001
+  pricing: tokens
+  usd_in_per_mtok: 0.01
+  usd_out_per_mtok: 0
   rate: 1000
   unit: request
   kind: compaction

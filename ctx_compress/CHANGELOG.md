@@ -10,3 +10,4 @@
 - Dataset: generated agent sessions at microtensor-io/agent-sessions. `mta dev` builds dev items and `mta hidden` builds hidden items from a secret seed with the session generator; token counts use the Granite tokenizer.
 - Evaluation text: the coordinator's spot check of 40 calls with 10 timed, evidence from two agreeing runs, the ban and appeal, the duplicate rule and at most 3 uploads per epoch. There is no resume gate: no agent is pinned and no code runs one.
 - Serving list price lowered from $0.005 to $0.001 per compaction, which is about $0.015 per million input tokens on a typical 67,000 token session.
+- Serving is priced per token instead of flat per compaction: $0.01 per million input tokens and output tokens free. A typical 67,000 token session costs about $0.0007 and a full 122,880 token session about $0.0012.
