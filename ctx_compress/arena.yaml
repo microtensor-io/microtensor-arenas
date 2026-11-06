@@ -217,7 +217,7 @@ chat:
   hint: Send the compaction instruction as the system message and the canonically rendered session inside <session> tags as the user message.
 serving:
   pricing: flat
-  usd_per_request: 0.005
+  usd_per_request: 0.001
   rate: 1000
   unit: request
   kind: compaction
