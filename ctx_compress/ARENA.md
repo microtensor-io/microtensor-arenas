@@ -4,7 +4,7 @@ Arena ID: `ctx_compress` · Category: Text · Network: testnet
 
 ## 1. Purpose
 
-Coding agent gateways classify every request by kind and route each kind to a model. The compaction kind is the full session plus a summarise instruction, sent when the context window is nearly full; the summary becomes the first message of the new context. Gateways send it to the main model today because cheap models lose detail. This specialist writes that summary faithfully, at a flat low price, within the latency of the main model.
+Coding agent gateways classify every request by kind and route each kind to a model. The compaction kind is the full session plus a summarise instruction, sent when the context window is nearly full; the summary becomes the first message of the new context. Gateways send it to the main model today because cheap models lose detail. This specialist writes that summary faithfully, at a low price per token, within the latency of the main model.
 
 **Input:** The agent's compaction instruction as the system message, and the session rendered as canonical text inside &lt;session&gt; tags as the user message, up to 120,000 tokens
 
