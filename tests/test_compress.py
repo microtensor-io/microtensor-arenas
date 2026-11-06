@@ -1,6 +1,7 @@
+import json
 from pathlib import Path
 
-from arenas.compress import build, hidden, synth
+from arenas.compress import build, canon, hidden, sources, synth
 
 
 def count(text: str) -> int:
@@ -40,3 +41,64 @@ def test_hidden_items_keep_the_seed_secret(tmp_path):
     assert report["per_test"] == {"slm": 1, "system": 1}
     assert seed not in (tmp_path / "items.jsonl").read_text(encoding="utf-8")
     assert seed not in (tmp_path / "report.json").read_text(encoding="utf-8")
+
+
+def _pi_file(tmp_path):
+    def entry(uid, parent, message):
+        return {"type": "message", "id": uid, "parentId": parent, "message": message}
+
+    call = {
+        "type": "toolCall",
+        "id": "c1",
+        "name": "read",
+        "arguments": {"path": "/repo/app/main.py"},
+    }
+    rows = [
+        {"type": "session", "version": 3, "id": "pi-1", "cwd": "/repo", "timestamp": "2026-01-05"},
+        entry("a", None, {"role": "user", "content": [{"type": "text", "text": "Fix the export"}]}),
+        entry("x", "a", {"role": "assistant", "content": [{"type": "text", "text": "dropped"}]}),
+        entry(
+            "b",
+            "a",
+            {
+                "role": "assistant",
+                "content": [{"type": "thinking", "thinking": "hidden"}, call],
+            },
+        ),
+        entry(
+            "c",
+            "b",
+            {
+                "role": "toolResult",
+                "toolCallId": "c1",
+                "content": [{"type": "text", "text": "def main():\n    pass"}],
+                "isError": False,
+            },
+        ),
+        entry("d", "c", {"role": "assistant", "content": [{"type": "text", "text": "Read it."}]}),
+    ]
+    path = tmp_path / "pi-1.jsonl"
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    return path
+
+
+def test_pi_sessions_follow_the_active_branch(tmp_path):
+    session = sources.parse(sources.pi_row(_pi_file(tmp_path)), "pi")
+    assert [step.role for step in session.steps] == ["user", "agent", "tool", "agent"]
+    assert session.steps[1].calls[0].kind == "read"
+    assert session.relative(session.steps[1].calls[0].path) == "app/main.py"
+    rendered = canon.render(session, len(session.steps))
+    assert "hidden" not in rendered and "dropped" not in rendered
+    assert "[tool_use kind=read name=read path=app/main.py]" in rendered
+
+
+def test_attached_probes_must_be_in_the_session():
+    pool, _ = build.generate(
+        "ctx_compress", 3, 1, [("synth", Path("4@20000-26000"))], min_tokens=2_000, count=count
+    )
+    item = pool.items[0]
+    item["label"]["attached"] = [
+        {"id": "kept", "keys": [item["task"]["user"][20:60]], "in_session": True},
+        {"id": "lost", "keys": ["never in any session 9f2c"], "in_session": True},
+    ]
+    assert build.check(pool) == [f"{item['item_id']}: attached probe lost is not in the session"]

@@ -162,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     dev.add_argument(
         "--source",
         action="append",
-        help="synth (default), synth=COUNT@MIN-MAX, or openhands=, coderforge=, claude_code= a folder",
+        help="synth (default), synth=COUNT@MIN-MAX, or openhands=, coderforge=, claude_code=, pi= a folder",
     )
     dev.add_argument("--min-tokens", type=int, default=build.DEV_MIN_TOKENS)
     dev.add_argument("--resolved-only", action="store_true")
