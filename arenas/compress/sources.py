@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-SOURCES = ("openhands", "coderforge", "claude_code", "synth")
+SOURCES = ("openhands", "coderforge", "claude_code", "synth", "pi")
+PI_CONTEXT = ("message", "custom_message", "branch_summary", "compaction")
 KINDS = ("read", "edit", "run", "test", "search", "install", "other")
 ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 TEST_COMMAND = re.compile(
@@ -57,6 +58,11 @@ TOOL_KINDS = {
     "search_file": "search",
     "search_dir": "search",
     "find_file": "search",
+    "read": "read",
+    "write": "edit",
+    "grep": "search",
+    "find": "search",
+    "ls": "search",
 }
 
 
@@ -161,7 +167,7 @@ def classify(name: str, arguments: Mapping[str, Any]) -> tuple[str, str, str]:
         kind = _shell_kind(command)
         path = path or _shell_path(command)
         short = command.strip().splitlines()[0][:200] if command.strip() else ""
-    elif name in ("Grep", "Glob", "search_file", "search_dir", "find_file"):
+    elif name in ("Grep", "Glob", "search_file", "search_dir", "find_file", "grep", "find"):
         short = str(arguments.get("pattern") or arguments.get("query") or "")[:120]
     elif name == "apply_patch":
         patch = str(arguments.get("input") or arguments.get("patch") or "")
@@ -304,6 +310,108 @@ def _claude_steps(messages: list[Mapping[str, Any]]) -> list[Step]:
     return steps
 
 
+def _pi_message(raw: Mapping[str, Any]) -> list[Step]:
+    role = str(raw.get("role") or "")
+    content = raw.get("content")
+    blocks = content if isinstance(content, list) else [{"type": "text", "text": content}]
+    if role == "user":
+        return [Step(role="user", text=ANSI.sub("", _text_of(content)))]
+    if role == "assistant":
+        text_parts, calls = [], []
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "text":
+                text_parts.append(str(block.get("text") or ""))
+            elif block.get("type") == "toolCall":
+                name = str(block.get("name") or "")
+                arguments = _loads(block.get("arguments"))
+                kind, path, short = classify(name, arguments if isinstance(arguments, dict) else {})
+                calls.append(
+                    ToolCall(
+                        name=name,
+                        kind=kind,
+                        path=path,
+                        args=short,
+                        call_id=str(block.get("id") or ""),
+                    )
+                )
+        return [Step(role="agent", text=ANSI.sub("", "\n".join(text_parts)), calls=calls)]
+    if role == "toolResult":
+        body = ANSI.sub("", _text_of(content))
+        ok = not bool(raw.get("isError")) if "isError" in raw else _result_meta(body)[0]
+        return [
+            Step(
+                role="tool",
+                text=body,
+                ok=ok,
+                lines=body.count("\n") + 1 if body else 0,
+                call_id=str(raw.get("toolCallId") or ""),
+            )
+        ]
+    if role == "bashExecution":
+        if raw.get("excludeFromContext"):
+            return []
+        shown = f"$ {raw.get('command') or ''}\n{raw.get('output') or ''}"
+        return [Step(role="user", text=ANSI.sub("", shown).strip())]
+    if role in ("compactionSummary", "branchSummary"):
+        return [Step(role="user", text=str(raw.get("summary") or ""))]
+    return []
+
+
+def _pi_steps(entries: list[Mapping[str, Any]]) -> list[Step]:
+    steps: list[Step] = []
+    starts: dict[str, int] = {}
+    for entry in entries:
+        kind = entry.get("type")
+        starts[str(entry.get("id") or "")] = len(steps)
+        if kind == "message":
+            steps.extend(_pi_message(entry.get("message") or {}))
+        elif kind == "custom_message":
+            text = ANSI.sub("", _text_of(entry.get("content")))
+            if text.strip():
+                steps.append(Step(role="user", text=text))
+        elif kind == "branch_summary":
+            steps.append(Step(role="user", text=str(entry.get("summary") or "")))
+        elif kind == "compaction":
+            kept = starts.get(str(entry.get("firstKeptEntryId") or ""), len(steps))
+            steps = [Step(role="user", text=str(entry.get("summary") or "")), *steps[kept:]]
+            starts = {}
+    return steps
+
+
+def pi_row(path: Path) -> dict[str, Any]:
+    header: dict[str, Any] = {}
+    entries: list[dict[str, Any]] = []
+    with path.open(encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            try:
+                found = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(found, dict):
+                continue
+            if found.get("type") == "session" and not header:
+                header = found
+            elif "id" in found:
+                entries.append(found)
+    by_id = {entry["id"]: entry for entry in entries}
+    chain: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    current = entries[-1] if entries else None
+    while current is not None and current["id"] not in seen:
+        seen.add(current["id"])
+        chain.append(current)
+        current = by_id.get(current.get("parentId"))
+    chain.reverse()
+    return {
+        "session_id": str(header.get("id") or path.stem),
+        "root": str(header.get("cwd") or ""),
+        "recorded_at": str(header.get("timestamp") or ""),
+        "entries": [entry for entry in chain if entry.get("type") in PI_CONTEXT],
+    }
+
+
 def _repo_of(instance_id: str) -> str:
     name = instance_id.split("__", 1)[-1]
     return re.sub(r"[-_]\d+(?:_run\d+)?$", "", name)
@@ -350,6 +458,20 @@ def parse(row: Mapping[str, Any], source: str) -> Session:
             created_at=str(row.get("recorded_at") or row.get("created_at") or ""),
             root=str(row.get("root") or ""),
         )
+    elif source == "pi":
+        entries = _loads(row.get("entries")) or []
+        root = str(row.get("root") or "").replace("\\", "/")
+        session = Session(
+            session_id=str(row.get("session_id") or ""),
+            repo=str(row.get("repo") or "").split("/")[-1] or root.rstrip("/").split("/")[-1],
+            source=source,
+            steps=_pi_steps(entries),
+            resolved=row.get("resolved") if isinstance(row.get("resolved"), bool) else None,
+            image=str(row.get("image") or ""),
+            licence=str(row.get("license") or ""),
+            created_at=str(row.get("recorded_at") or row.get("created_at") or ""),
+            root=root.rstrip("/") + "/" if root else "",
+        )
     else:
         raise ValueError(f"unknown source {source!r}; known: {', '.join(SOURCES)}")
     if session.steps and session.steps[0].role != "user":
@@ -380,6 +502,10 @@ def rows(path: Path, source: str) -> Iterator[dict[str, Any]]:
         else [path]
     )
     for file in files:
+        if source == "pi":
+            if file.suffix == ".jsonl":
+                yield pi_row(file)
+            continue
         if file.suffix == ".parquet":
             import pyarrow.parquet as pq
 

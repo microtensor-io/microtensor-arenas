@@ -78,9 +78,10 @@ def make_item(
     *,
     min_tokens: int,
     twin_of: str = "",
+    min_probes: int = MIN_PROBES,
 ) -> dict[str, Any] | None:
     found_facts, found_probes = observe.labels(session, cut)
-    if len(found_facts) < MIN_FACTS or len(found_probes) < MIN_PROBES:
+    if len(found_facts) < MIN_FACTS or len(found_probes) < min_probes:
         return None
     user = canon.render(session, cut)
     session_tokens = count(user)
@@ -233,11 +234,25 @@ def add_goal_probes(pool: Pool, rng: random.Random) -> None:
         )
 
 
+def _attached_problems(item_id: str, session: str, attached: list[dict[str, Any]]) -> list[str]:
+    flat = " ".join(session.split())
+    problems: list[str] = []
+    for probe in attached:
+        keys = [" ".join(str(key).split()) for key in probe.get("keys") or []]
+        missing = [key for key in keys if key not in flat]
+        if probe.get("in_session", True) and missing:
+            problems.append(f"{item_id}: attached probe {probe.get('id')} is not in the session")
+        elif not probe.get("in_session", True) and keys and not missing:
+            problems.append(f"{item_id}: attached probe {probe.get('id')} is in the session")
+    return problems
+
+
 def check(pool: Pool) -> list[str]:
     problems: list[str] = []
     for item in pool.items:
         label = item["label"]
         session = item["task"]["user"]
+        problems += _attached_problems(item["item_id"], session, label.get("attached") or [])
         if len(label["facts"]) < MIN_FACTS:
             problems.append(f"{item['item_id']}: {len(label['facts'])} facts")
         if len(label["probes"]) < MIN_PROBES:
