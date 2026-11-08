@@ -275,8 +275,10 @@ SERVING_KEYS = (
     "cap_schedule",
     "floor_epochs",
     "floor_share",
+    "revenue_share",
 )
 MAX_FLOOR_SHARE = 0.5
+REBATE = 1 / 25
 
 
 def _schedule(value: Any) -> None:
@@ -330,6 +332,15 @@ def _serving(arena: dict[str, Any]) -> dict[str, Any]:
         or not 0 <= serving["floor_share"] <= MAX_FLOOR_SHARE
     ):
         raise ValueError(f"serving.floor_share is between 0 and {MAX_FLOOR_SHARE}")
+    if "revenue_share" in serving and (
+        not isinstance(serving["revenue_share"], int | float)
+        or isinstance(serving["revenue_share"], bool)
+        or not 0 <= serving["revenue_share"] < 1 - REBATE
+    ):
+        raise ValueError(
+            "serving.revenue_share is the operators' fraction of billing and must leave "
+            f"Microtensor more than the {REBATE:g} rebate"
+        )
     return serving
 
 

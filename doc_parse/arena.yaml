@@ -207,3 +207,4 @@ serving:
     - {cap: 0.02}
   floor_epochs: 3
   floor_share: 0.01
+  revenue_share: 0.9
