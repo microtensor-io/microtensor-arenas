@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import math
 
 import pytest
 
@@ -82,3 +83,97 @@ def test_miner_mode_renders_section_nine_and_reaches_the_definition() -> None:
     assert definition.evaluation(other) is None
     assert "## 9." not in spec.markdown(spec.build(other))
     assert "evaluation" not in spec.build(other)
+
+
+def _tiered() -> dict:
+    return {
+        "pricing": "tiered",
+        "price_schedule": [
+            {"input_tokens_below": 50000, "usd_per_request": 0.001},
+            {"usd_per_request": 0.004},
+        ],
+        "revenue_share": 0.8,
+    }
+
+
+def _long_prompt() -> dict:
+    return {"above_input_tokens": 50000, "usd_in_per_mtok": 0.3, "usd_out_per_mtok": 1.2}
+
+
+def test_every_arena_builds_with_an_operator_share_of_eighty_percent() -> None:
+    for arena_id in definition.arena_ids():
+        arena = definition.load(arena_id)
+        built = definition.build(arena_id, genesis_block=1, sample_database="0" * 64)["definition"]
+        assert built["serving"] == arena["serving"]
+        assert built["serving"]["revenue_share"] == 0.8
+        assert built["baseline_models"] == arena["escalation"]["frontier"]
+
+
+def test_tiered_serving_takes_a_price_schedule() -> None:
+    assert definition.checked_serving(_tiered()) == _tiered()
+    assert definition.checked_serving(None) == {}
+    single = {"pricing": "tiered", "price_schedule": [{"usd_per_request": 0.004}]}
+    assert definition.checked_serving(single) == single
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda s: s["price_schedule"][0].update(usd_per_request=0), "positive usd_per_request"),
+        (lambda s: s["price_schedule"][1].update(input_tokens_below=200000), "last band without"),
+        (lambda s: s["price_schedule"].insert(0, dict(s["price_schedule"][0])), "must rise"),
+        (lambda s: s["price_schedule"][0].update(input_tokens_below=2**31), "at most 2147483647"),
+        (lambda s: s["price_schedule"][1].update(usd_per_request=math.inf), "finite"),
+        (lambda s: s["price_schedule"][1].update(usd_per_request=10**400), "finite"),
+        (lambda s: s["price_schedule"][1].update(usd_per_request=10.5), "at most 10"),
+        (lambda s: s.update(usd_in_per_mtok=0.01), "no token prices"),
+        (lambda s: s.update(pricing="tokens"), "belongs to tiered"),
+    ],
+)
+def test_bad_price_bands_and_mixed_modes_are_refused(change, message: str) -> None:
+    serving = _tiered()
+    change(serving)
+    with pytest.raises(ValueError, match=message):
+        definition.checked_serving(serving)
+
+
+def test_a_long_prompt_tier_validates_and_stays_out_of_the_page_and_the_relay(monkeypatch) -> None:
+    arena = definition.load("ctx_compress")
+    frontier = copy.deepcopy(arena["escalation"]["frontier"])
+    frontier[0]["long_prompt"] = _long_prompt()
+    assert definition.checked_frontier(frontier) == frontier
+    plain = [{k: v for k, v in model.items() if k != "long_prompt"} for model in frontier]
+    with_tier = {**arena, "escalation": {**arena["escalation"], "frontier": frontier}}
+    without = {**arena, "escalation": {**arena["escalation"], "frontier": plain}}
+    page = spec.markdown(spec.build(with_tier))
+    assert page == spec.markdown(spec.build(without))
+    assert (
+        "anthropic/claude-haiku-5.5 ($0.1 in, $0.5 out per M tokens)<br>"
+        "z-ai/glm-5.3-flash ($0.048 in, $0.2 out per M tokens) |"
+    ) in page
+    monkeypatch.setattr(definition, "load", lambda arena_id: without)
+    relay = definition.relay_catalog("ctx_compress")
+    monkeypatch.setattr(definition, "load", lambda arena_id: with_tier)
+    assert definition.relay_catalog("ctx_compress") == relay
+    assert all("long_prompt" not in row for row in relay)
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda m: m.update(context=200000), "unknown key 'context'"),
+        (lambda m: m.update(usd_in_per_mtok="0.1"), "usd_in_per_mtok must be a number"),
+        (lambda m: m.update(usd_out_per_mtok=math.inf), "usd_out_per_mtok must be finite"),
+        (lambda m: m["long_prompt"].update(usd_in_per_mtok=0, usd_out_per_mtok=0), "above 0"),
+        (lambda m: m["long_prompt"].update(usd_per_request=1), "unknown key 'usd_per_request'"),
+        (lambda m: m["long_prompt"].update(above_input_tokens=2**31), "at most 2147483647"),
+        (lambda m: m["long_prompt"].update(usd_in_per_mtok=1000.5), "at most 1000"),
+        (lambda m: m["long_prompt"].update(usd_out_per_mtok=10**400), "must be finite"),
+    ],
+)
+def test_frontier_entries_are_validated(change, message: str) -> None:
+    frontier = copy.deepcopy(definition.load("ctx_compress")["escalation"]["frontier"])
+    frontier[0]["long_prompt"] = _long_prompt()
+    change(frontier[0])
+    with pytest.raises(ValueError, match=message):
+        definition.checked_frontier(frontier)
