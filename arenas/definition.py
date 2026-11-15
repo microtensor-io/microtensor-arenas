@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -276,9 +277,23 @@ SERVING_KEYS = (
     "floor_epochs",
     "floor_share",
     "revenue_share",
+    "price_schedule",
 )
+SERVING_PRICING = ("tokens", "flat", "tiered")
+FRONTIER_KEYS = ("model", "provider", "version", "usd_in_per_mtok", "usd_out_per_mtok")
+LONG_PROMPT_KEYS = ("above_input_tokens", "usd_in_per_mtok", "usd_out_per_mtok")
 MAX_FLOOR_SHARE = 0.5
+MAX_INPUT_TOKENS = 2_147_483_647
+MAX_PRICE_PER_MTOK = 1000.0
+MAX_PRICE_PER_REQUEST = 10.0
 REBATE = 1 / 25
+
+
+def _finite(value: float) -> bool:
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def _schedule(value: Any) -> None:
@@ -305,22 +320,67 @@ def _schedule(value: Any) -> None:
         raise ValueError("the cap schedule needs a last band without billing_usd_below")
 
 
-def _serving(arena: dict[str, Any]) -> dict[str, Any]:
-    serving = dict(arena.get("serving") or {})
+def _price_schedule(value: Any) -> None:
+    if not isinstance(value, list) or not value:
+        raise ValueError("serving.price_schedule is a list of bands")
+    previous: int | None = None
+    for index, band in enumerate(value):
+        band = _mapping(band, "serving.price_schedule band")
+        if set(band) - {"input_tokens_below", "usd_per_request"}:
+            raise ValueError(
+                "a price schedule band carries usd_per_request and optionally input_tokens_below"
+            )
+        price = band.get("usd_per_request")
+        if isinstance(price, bool) or not isinstance(price, int | float) or not price > 0:
+            raise ValueError("each price schedule band needs a positive usd_per_request")
+        if not _finite(price):
+            raise ValueError("each price schedule band needs a finite usd_per_request")
+        if price > MAX_PRICE_PER_REQUEST:
+            raise ValueError(f"a band's usd_per_request is at most {MAX_PRICE_PER_REQUEST:g}")
+        if "input_tokens_below" not in band:
+            if index != len(value) - 1:
+                raise ValueError("the band without input_tokens_below must be the last one")
+            continue
+        bound = band["input_tokens_below"]
+        if isinstance(bound, bool) or not isinstance(bound, int) or bound < 1:
+            raise ValueError("input_tokens_below is a positive whole number of tokens")
+        if bound > MAX_INPUT_TOKENS:
+            raise ValueError(f"input_tokens_below is at most {MAX_INPUT_TOKENS} tokens")
+        if previous is not None and bound <= previous:
+            raise ValueError("price schedule bands must rise in input_tokens_below")
+        previous = bound
+    if "input_tokens_below" in value[-1]:
+        raise ValueError("the price schedule needs a last band without input_tokens_below")
+
+
+def checked_serving(serving: Any) -> dict[str, Any]:
+    serving = dict(_mapping(serving or {}, "serving"))
     unknown = set(serving) - set(SERVING_KEYS)
     if unknown:
         raise ValueError(f"serving carries unknown keys: {', '.join(sorted(unknown))}")
     pricing = serving.get("pricing", "tokens")
-    if pricing not in ("tokens", "flat"):
-        raise ValueError("serving.pricing is tokens or flat")
+    if pricing not in SERVING_PRICING:
+        raise ValueError("serving.pricing is tokens, flat or tiered")
     if pricing == "flat":
         price = serving.get("usd_per_request")
         if isinstance(price, bool) or not isinstance(price, int | float) or price <= 0:
             raise ValueError("flat serving needs a positive usd_per_request")
+        if not _finite(price):
+            raise ValueError("flat serving needs a finite usd_per_request")
+        if price > MAX_PRICE_PER_REQUEST:
+            raise ValueError(f"flat usd_per_request is at most {MAX_PRICE_PER_REQUEST:g}")
         if "usd_in_per_mtok" in serving or "usd_out_per_mtok" in serving:
             raise ValueError("flat serving carries no token prices")
     elif "usd_per_request" in serving:
         raise ValueError("usd_per_request belongs to flat serving")
+    if pricing == "tiered":
+        if "usd_in_per_mtok" in serving or "usd_out_per_mtok" in serving:
+            raise ValueError("tiered serving carries no token prices")
+        if "price_schedule" not in serving:
+            raise ValueError("tiered serving needs a price_schedule")
+        _price_schedule(serving["price_schedule"])
+    elif "price_schedule" in serving:
+        raise ValueError("price_schedule belongs to tiered serving")
     if "cap_schedule" in serving:
         _schedule(serving["cap_schedule"])
     if "floor_epochs" in serving and (
@@ -342,6 +402,54 @@ def _serving(arena: dict[str, Any]) -> dict[str, Any]:
             f"Microtensor more than the {REBATE:g} rebate"
         )
     return serving
+
+
+def _rate(block: dict[str, Any], key: str, where: str) -> None:
+    value = block.get(key)
+    if isinstance(value, bool) or not isinstance(value, int | float) or not value >= 0:
+        raise ValueError(f"{where}.{key} must be a number of at least 0")
+    if not _finite(value):
+        raise ValueError(f"{where}.{key} must be finite")
+
+
+def _long_prompt(value: Any, where: str) -> dict[str, Any]:
+    block = dict(_mapping(value, where))
+    _exact(block, LONG_PROMPT_KEYS, where)
+    _positive(block, "above_input_tokens", where)
+    if block["above_input_tokens"] > MAX_INPUT_TOKENS:
+        raise ValueError(f"{where}.above_input_tokens must be at most {MAX_INPUT_TOKENS}")
+    for key in ("usd_in_per_mtok", "usd_out_per_mtok"):
+        _rate(block, key, where)
+        if block[key] > MAX_PRICE_PER_MTOK:
+            raise ValueError(f"{where}.{key} must be at most {MAX_PRICE_PER_MTOK:g}")
+    if not block["usd_in_per_mtok"] and not block["usd_out_per_mtok"]:
+        raise ValueError(f"{where} needs a price above 0 on at least one side")
+    return block
+
+
+def _listed(value: Any, where: str) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    raise ValueError(f"{where} must be a list")
+
+
+def checked_frontier(entries: Any) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
+    for index, entry in enumerate(_listed(entries, "escalation.frontier")):
+        where = f"escalation.frontier[{index}]"
+        block = dict(_mapping(entry, where))
+        for key in block:
+            if key not in FRONTIER_KEYS and key != "long_prompt":
+                raise ValueError(f"unknown key {key!r} in {where}")
+        for key in ("model", "provider", "version"):
+            if not isinstance(block.get(key), str) or not block[key].strip():
+                raise ValueError(f"{where}.{key} must be a non empty string")
+        for key in ("usd_in_per_mtok", "usd_out_per_mtok"):
+            _rate(block, key, where)
+        if "long_prompt" in block:
+            block["long_prompt"] = _long_prompt(block["long_prompt"], f"{where}.long_prompt")
+        found.append(block)
+    return found
 
 
 def _bases(arena: dict[str, Any]) -> list[dict[str, Any]]:
@@ -413,7 +521,7 @@ def build(
         "success_rule": slm["success_rule"],
         "grader": slm["grader"],
         "twin_rule": slm["twin_rule"],
-        "baseline_models": arena["escalation"]["frontier"],
+        "baseline_models": checked_frontier(arena["escalation"]["frontier"]),
         "references": references,
         "tools": harness["tools"],
         "floors": arena["floors"],
@@ -450,7 +558,7 @@ def build(
         "fee_coldkey": arena["fee"]["coldkey"],
         "hardware_classes": [envelopes.serving_class(envelope)],
         "chat": arena["chat"],
-        "serving": _serving(arena),
+        "serving": checked_serving(arena.get("serving")),
         "spec": spec.build(arena),
         "guide": None,
     }
