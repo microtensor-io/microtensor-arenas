@@ -34,7 +34,8 @@ OPTIONAL_EVALUATION_KEYS = ("resume",)
 MINER_SETTLE_MARGIN = 1800
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 REVISION = re.compile(r"^[0-9a-f]{40}$")
-ITEM_COUNTS = {"slm": 400, "harness": 400, "router": 250, "escalation": 120, "system": 400}
+POOLS = ("slm", "system")
+SPOT_CHECKED_PROFILES = ("P1",)
 SCORING: dict[str, Any] = {
     "wilson_z": 1.645,
     "twin": {"tolerance": 0.03, "slope": None},
@@ -46,9 +47,9 @@ SCORING: dict[str, Any] = {
     "edge_bonus": None,
     "envelope_rule": "p95",
     "cap": 1.0,
-    "empty_pools": "redistribute",
+    "empty_pools": "burn",
     "router": "floors_brier",
-    "min_items": 400,
+    "min_items": 25,
 }
 
 
@@ -72,6 +73,7 @@ def load(arena_id: str) -> dict[str, Any]:
     }
     arena["envelope"] = envelopes.resolve(arena["envelope"])
     arena["scoring"] = scoring(arena)
+    item_counts(arena)
     arena["slm"] = {**arena["slm"], "bases": _bases(arena)}
     block = evaluation(arena)
     if block is not None:
@@ -117,6 +119,12 @@ def _profiles(value: Any) -> None:
             )
     if len(set(value)) != len(value):
         raise ValueError("evaluation.profiles repeats a profile")
+    for name in value:
+        if name not in SPOT_CHECKED_PROFILES:
+            raise ValueError(
+                f"evaluation.profiles lists {name}, which no spot check covers yet; list only "
+                f"{', '.join(SPOT_CHECKED_PROFILES)}"
+            )
 
 
 def _image(name: str, entry: Any) -> None:
@@ -255,6 +263,19 @@ def evaluation(arena: dict[str, Any]) -> dict[str, Any] | None:
     return block
 
 
+def item_counts(arena: dict[str, Any]) -> dict[str, int]:
+    counts = _mapping(arena.get("item_counts"), "item_counts")
+    _counts(counts, POOLS, "item_counts")
+    floor = arena["scoring"]["min_items"]
+    for pool, count in counts.items():
+        if count < floor:
+            raise ValueError(
+                f"item_counts.{pool} is {count}, below scoring.min_items {floor}, so no miner "
+                "could be paid"
+            )
+    return counts
+
+
 def scoring(arena: dict[str, Any]) -> dict[str, Any]:
     found = dict(SCORING)
     for key, value in (arena.get("scoring") or {}).items():
@@ -273,16 +294,12 @@ SERVING_KEYS = (
     "unit",
     "usd_in_per_mtok",
     "usd_out_per_mtok",
-    "cap_schedule",
-    "floor_epochs",
-    "floor_share",
     "revenue_share",
     "price_schedule",
 )
 SERVING_PRICING = ("tokens", "flat", "tiered")
 FRONTIER_KEYS = ("model", "provider", "version", "usd_in_per_mtok", "usd_out_per_mtok")
 LONG_PROMPT_KEYS = ("above_input_tokens", "usd_in_per_mtok", "usd_out_per_mtok")
-MAX_FLOOR_SHARE = 0.5
 MAX_INPUT_TOKENS = 2_147_483_647
 MAX_PRICE_PER_MTOK = 1000.0
 MAX_PRICE_PER_REQUEST = 10.0
@@ -294,30 +311,6 @@ def _finite(value: float) -> bool:
         return math.isfinite(value)
     except OverflowError:
         return False
-
-
-def _schedule(value: Any) -> None:
-    if not isinstance(value, list) or not value:
-        raise ValueError("serving.cap_schedule is a list of bands")
-    previous: float | None = None
-    for index, band in enumerate(value):
-        band = _mapping(band, "serving.cap_schedule band")
-        if set(band) - {"billing_usd_below", "cap"}:
-            raise ValueError("a cap schedule band carries cap and optionally billing_usd_below")
-        if not isinstance(band.get("cap"), int | float) or not 0 <= band["cap"] <= 1:
-            raise ValueError("each cap schedule band needs a cap between 0 and 1")
-        bound = band.get("billing_usd_below")
-        if bound is None:
-            if index != len(value) - 1:
-                raise ValueError("the band without billing_usd_below must be the last one")
-            continue
-        if not isinstance(bound, int | float) or bound < 0:
-            raise ValueError("billing_usd_below is an amount in USD")
-        if previous is not None and bound <= previous:
-            raise ValueError("cap schedule bands must rise in billing_usd_below")
-        previous = float(bound)
-    if "billing_usd_below" in value[-1]:
-        raise ValueError("the cap schedule needs a last band without billing_usd_below")
 
 
 def _price_schedule(value: Any) -> None:
@@ -381,17 +374,6 @@ def checked_serving(serving: Any) -> dict[str, Any]:
         _price_schedule(serving["price_schedule"])
     elif "price_schedule" in serving:
         raise ValueError("price_schedule belongs to tiered serving")
-    if "cap_schedule" in serving:
-        _schedule(serving["cap_schedule"])
-    if "floor_epochs" in serving and (
-        not isinstance(serving["floor_epochs"], int) or serving["floor_epochs"] < 0
-    ):
-        raise ValueError("serving.floor_epochs is a whole number of epochs")
-    if "floor_share" in serving and (
-        not isinstance(serving["floor_share"], int | float)
-        or not 0 <= serving["floor_share"] <= MAX_FLOOR_SHARE
-    ):
-        raise ValueError(f"serving.floor_share is between 0 and {MAX_FLOOR_SHARE}")
     if "revenue_share" in serving and (
         not isinstance(serving["revenue_share"], int | float)
         or isinstance(serving["revenue_share"], bool)
@@ -532,7 +514,6 @@ def build(
             "router": {
                 "max_parameters": router["max_parameters"],
                 "max_input_tokens": router["max_input_tokens"],
-                "latency_gate_ms": router["latency_gate_ms"],
             },
             "harness": {
                 key: harness[key]
@@ -541,7 +522,6 @@ def build(
                     "max_steps",
                     "max_total_tokens",
                     "max_model_calls",
-                    "added_wall_p95_ms",
                     "faults",
                 )
                 if key in harness

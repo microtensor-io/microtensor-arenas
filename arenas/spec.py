@@ -2,21 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-TOKEN_ALLOWANCE = 1.5
-BRIER_WEIGHT = 0.2
-ROUTER_MEAN_WEIGHT = 0.7
-ROUTER_MIN_WEIGHT = 0.3
-ESCALATION_MARGIN = 0.02
 COST_WEIGHT = 0.7
 LATENCY_WEIGHT = 0.3
-MIN_ITEMS = 400
-RESAMPLES = 200
-POOL_SHARE = 0.2
+POOLS = (("slm", "Specialist model", 60), ("system", "Full system", 40))
 RANK_PAYOUT = (40, 25, 15, 12, 8)
 LADDER_STEP = 0.01
-COMPONENTS = ("Specialised SLM", "Harness", "Router", "Escalation repair", "Full system")
+IN_SYSTEM = "No pool of its own: {part} is scored inside the full system (section 7){rule}."
 WEIGHT_NAMES = {"ttft": "TTFT", "memory": "mem", "parameters": "N", "tpot": "TPOT"}
 BLOCKS_PER_HOUR = 300
+DEADLINE_BLOCKS = 150
 MAX_UPLOADS = 3
 SAMPLE_BLOCKS = 10
 TIMED_CALLS = 10
@@ -126,7 +120,7 @@ def mechanism(scoring: dict[str, Any], envelope: dict[str, Any]) -> list[dict[st
             {
                 "name": "Envelope pass",
                 "formula": (
-                    "P = 1 if every call the coordinator times is within the limits for its input "
+                    "P = 1 if every call the spot check times is within the limits for its input "
                     "length and peak memory is within the envelope, otherwise 0"
                 ),
             },
@@ -195,7 +189,6 @@ def _harness_rows(harness: dict[str, Any]) -> list[list[str]]:
         ["Request timeout", f"{harness['request_timeout_s']} s"],
         ["Code size", f"≤ {harness['code_limit_mb']} MB with escalation"],
         ["Limits", f"{harness['max_steps']} steps, {_int(harness['max_total_tokens'])} tokens"],
-        ["Baselines", "bare model under the arena prompt, reference harness and its variants"],
     ]
 
 
@@ -208,9 +201,6 @@ def _router_rows(router: dict[str, Any]) -> list[list[str]]:
         ["Max input", f"{_int(router['max_input_tokens'])} tokens"],
         ["Request", 'POST /decide {"input": {"query", "draft"}}'],
         ["Response", '{"answers": [{"label": "draft_correct", "probability": p}]}'],
-        ["Latency (p95)", f"< {_int(router['latency_gate_ms'])} ms"],
-        ["Drafts", "your model, the reference model, other miners, adversarial"],
-        ["Baseline", router.get("reference") or "reference router, not published yet"],
     ]
 
 
@@ -226,46 +216,6 @@ def _escalation_rows(escalation: dict[str, Any]) -> list[list[str]]:
         ["Frontier access", "relay only, with the ticket in the x-mt-ticket header"],
         ["Frontier models", models],
         ["Spend cap", f"{escalation['spend_cap_multiple']:g} × frontier redo cost per item"],
-        ["Baseline", "frontier redo pass rate and cost"],
-    ]
-
-
-def _router_score(kind: str, floors: list[float], latency: int) -> list[dict[str, str]]:
-    paid = {
-        "name": "Paid when",
-        "formula": (
-            f"≥ {MIN_ITEMS} drafts and the 5th percentile of S_r − S_ref over "
-            f"{RESAMPLES} family resamples is above 0"
-        ),
-    }
-    score = {
-        "name": "Score",
-        "formula": (
-            f"S_r = {ROUTER_MEAN_WEIGHT}·mean(s) + {ROUTER_MIN_WEIGHT}·min(s) "
-            f"if p95 latency < {_int(latency)} ms, otherwise 0"
-        ),
-    }
-    if kind == "brier_auroc":
-        return [
-            {
-                "name": "Per source",
-                "note": "Brier_base is the Brier score of always predicting the share of passing drafts.",
-                "formula": "s = 0.5·max(0, 1 − Brier / Brier_base) + 0.5·max(0, 2·AUROC − 1)",
-            },
-            score,
-            paid,
-        ]
-    return [
-        {
-            "name": "Loss per draft",
-            "formula": (
-                "ℓ(p, y) = (1/F)·Σ_f [ f·1(p ≥ f, y = 0) + (1 − f)·1(p < f, y = 1) ] "
-                f"+ {BRIER_WEIGHT}·(p − y)²,  f ∈ {{{_floors(floors)}}}"
-            ),
-        },
-        {"name": "Per source", "formula": "s = max(0, 1 − mean ℓ(p, y) / mean ℓ(ȳ, y))"},
-        score,
-        paid,
     ]
 
 
@@ -322,8 +272,10 @@ def _spot_rows(spot: dict[str, Any], limits: dict[str, Any]) -> list[list[str]]:
             "Spot check",
             (
                 f"the coordinator, run by the subnet owner, reruns {_int(calls)} SLM calls per "
-                "miner on the miner's profile and requires an exact token match; the calls are "
-                "drawn from those that did not fault, seeded by the transcript hash and the block "
+                "miner on the miner's profile and requires an exact token match; a validator with "
+                "a GPU of that profile may rerun the same calls with the same check and use its "
+                "own result; the calls are drawn from those that did not fault, seeded by the "
+                "transcript hash and the block "
                 f"hash {SAMPLE_BLOCKS} blocks after the upload; {spot['reference_calls']} "
                 "reference calls are timed on the same card once per epoch"
             ),
@@ -344,7 +296,19 @@ def _spot_rows(spot: dict[str, Any], limits: dict[str, Any]) -> list[list[str]]:
             (
                 "a mismatch is rerun on the same card after the engine restarts; if both runs "
                 "agree with each other and differ from the miner, it goes in the coordinator's "
-                "signed report as evidence"
+                "signed report as evidence; when a validator's own check fails a miner, the miner "
+                "scores 0 in that validator's report only, with no ban"
+            ),
+        ],
+        [
+            "No result",
+            (
+                "a miner with no spot check result for its upload scores 0 in the specialist "
+                "model and full system pools for that epoch; it is not a ban and there is no "
+                "appeal; a check that ran is a result even when it reproduced few calls; when no "
+                f"coordinator report reaches the server by {DEADLINE_BLOCKS} blocks before "
+                "settlement, validators keep the last settled weights and the epoch settles "
+                "void, so the arena keeps paying the previous settlement"
             ),
         ],
     ]
@@ -390,11 +354,12 @@ def _evaluation(arena: dict[str, Any]) -> dict[str, Any]:
         [
             "Duplicates",
             (
-                "every validator compares each part with earlier submissions before scoring, "
-                "whichever hotkey or coldkey made them; the earliest commit on chain wins, the "
-                "earlier transaction when two share a block, and a sealed commitment counts from "
-                "its sealed commit, not its reveal; a duplicated part scores 0 in its own pool "
-                "and in the full system pool for that epoch, and the miner's other parts are "
+                "every validator compares each model and router with earlier submissions before "
+                "scoring, whichever hotkey or coldkey made them; the earliest commit on chain "
+                "wins, the earlier transaction when two share a block, and a sealed commitment "
+                "counts from its sealed commit, not its reveal; a duplicated model scores 0 in "
+                "the specialist model and full system pools and a duplicated router in the full "
+                "system pool for that epoch; when only the router is a duplicate the model is "
                 "still scored"
             ),
         ]
@@ -446,14 +411,8 @@ def _evaluation(arena: dict[str, Any]) -> dict[str, Any]:
 def build(arena: dict[str, Any]) -> dict[str, Any]:
     slm = arena["slm"]
     envelope = arena["envelope"]
-    harness = arena["harness"]
-    router = arena["router"]
-    escalation = arena["escalation"]
     scoring = arena["scoring"]
     floors = arena["floors"]
-    limits_hold = (
-        " if the harness limits hold, otherwise 0" if harness.get("max_model_calls") else ""
-    )
     empty = (
         "Empty pools burn."
         if scoring["empty_pools"] == "burn"
@@ -489,52 +448,30 @@ def build(arena: dict[str, Any]) -> dict[str, Any]:
             ],
         },
         "harness": {
-            "rows": _harness_rows(harness),
-            "score": [
-                {
-                    "name": "Score",
-                    "formula": (
-                        f"S_h = max(0, LB_paired(H − B*)) · min(1, {TOKEN_ALLOWANCE} · tokens_B* / tokens_H)"
-                        f"{limits_hold}"
-                    ),
-                },
-                {
-                    "name": "Where",
-                    "formula": (
-                        "B* is the best baseline; LB_paired is the one sided 95% lower bound of the "
-                        "per item pass difference, clustered by family"
-                    ),
-                },
-                {"name": "Paid when", "formula": f"n ≥ {scoring['min_items']} and S_h > 0"},
-            ],
+            "rows": _harness_rows(arena["harness"]),
+            "note": IN_SYSTEM.format(part="the harness", rule=""),
         },
         "router": {
-            "rows": _router_rows(router),
-            "score": _router_score(scoring["router"], floors, router["latency_gate_ms"]),
+            "rows": _router_rows(arena["router"]),
+            "note": IN_SYSTEM.format(
+                part="the router",
+                rule=", where a router over its size limit or copied from an earlier submission "
+                "scores 0",
+            ),
         },
         "escalation": {
-            "rows": _escalation_rows(escalation),
-            "score": [
-                {
-                    "name": "Gate",
-                    "formula": f"LB(repair passes) ≥ redo pass rate − {ESCALATION_MARGIN}",
-                },
-                {
-                    "name": "Score",
-                    "formula": "S_e = max(0, 1 − repair_cost / redo_cost) if the gate holds, otherwise 0",
-                },
-                {
-                    "name": "Paid when",
-                    "formula": (
-                        f"n ≥ {scoring['min_items']} and the 5th percentile of S_e − S_ref over "
-                        f"{RESAMPLES} family resamples is above 0; S_ref is 0, the score of a full "
-                        "frontier redo, while no reference repair is published"
-                    ),
-                },
-            ],
+            "rows": _escalation_rows(arena["escalation"]),
+            "note": IN_SYSTEM.format(
+                part="escalation repair", rule=", through the pass rate and cost of the answers"
+            ),
         },
         "system": {
             "rows": [
+                [
+                    "Pipeline",
+                    "the specialist model, harness, router and escalation repair run together on "
+                    "every item; parts the miner does not ship come from the reference",
+                ],
                 ["Floors", _floors(floors)],
                 ["Reference", "frontier answer cost and p95 latency"],
             ],
@@ -551,11 +488,15 @@ def build(arena: dict[str, Any]) -> dict[str, Any]:
             ],
         },
         "scoring": {
-            "rows": [[name, f"{POOL_SHARE * 100:g}%"] for name in COMPONENTS],
+            "rows": [[name, f"{share}%"] for _, name, share in POOLS],
+            "shares": {pool: share for pool, _, share in POOLS},
             "split": (
-                "Within each component the top five eligible miners get "
+                "The two pools share all of the subnet's miner emission; no share goes to "
+                "serving or compute. Within each pool the top five eligible miners get "
                 f"{', '.join(f'{p}%' for p in RANK_PAYOUT[:-1])} and {RANK_PAYOUT[-1]}%. "
-                f"Published scores move on a {LADDER_STEP:g} ladder. {empty}"
+                f"Published scores move on a {LADDER_STEP:g} ladder. {empty} The harness, router "
+                "and escalation repair have no pools of their own and count through the full "
+                "system."
             ),
         },
         "item_counts": arena["item_counts"],
@@ -665,21 +606,9 @@ def markdown(page: dict[str, Any]) -> str:
     if envelope["overrides"]:
         lines += ["Stricter limits in this arena:", "", *_across(envelope["overrides"], 4), ""]
     lines += [
-        "## 4. Harness specification",
-        "",
-        *_across(page["harness"]["rows"], 4),
-        "",
-        *_formulas(page["harness"]["score"]),
-        "## 5. Router specification",
-        "",
-        *_across(page["router"]["rows"], 4),
-        "",
-        *_formulas(page["router"]["score"]),
-        "## 6. Escalation repair specification",
-        "",
-        *_across(page["escalation"]["rows"], 4),
-        "",
-        *_formulas(page["escalation"]["score"]),
+        *_part("## 4. Harness specification", page["harness"]),
+        *_part("## 5. Router specification", page["router"]),
+        *_part("## 6. Escalation repair specification", page["escalation"]),
         "## 7. Full system",
         "",
         *_across(page["system"]["rows"], 4),
@@ -701,6 +630,10 @@ def markdown(page: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _part(heading: str, part: dict[str, Any]) -> list[str]:
+    return [heading, "", *_across(part["rows"], 4), "", part["note"], ""]
+
+
 def _evaluation_section(evaluation: dict[str, Any]) -> list[str]:
     lines = ["## 9. Evaluation and hardware profiles", "", *_across(evaluation["rows"], 2), ""]
     if evaluation["profiles"]:
@@ -709,8 +642,10 @@ def _evaluation_section(evaluation: dict[str, Any]) -> list[str]:
             "",
             (
                 "A profile is one GPU architecture, one driver and one image digest. A miner "
-                "declares its profile in its commitment and is spot checked by the coordinator "
-                "on the same profile."
+                "declares its profile in its commitment and is spot checked on the same profile, "
+                "by the coordinator and by any validator with a GPU of that profile. An arena "
+                "lists only the profiles the coordinator checks, because a miner with no spot "
+                "check result scores 0."
             ),
             "",
             *_table(

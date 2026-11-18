@@ -132,7 +132,7 @@ scoring:
   cap: null
   empty_pools: burn
   router: brier_auroc
-  min_items: 100
+  min_items: 25
 
 harness:
   tools: []
@@ -141,12 +141,10 @@ harness:
   max_steps: 16
   max_total_tokens: 50000
   max_model_calls: 3
-  added_wall_p95_ms: 2000
   faults: model
   rows:
     - [Role, "wraps the SLM; may deskew, crop, tile and rotate the page, validate the Markdown and retry"]
     - [Model calls, at most 3 per item]
-    - [Added wall time (p95), "≤ 2 s per page"]
     - [Network, none except the gateway]
     - [Faults, "about 1 in 7 items get a faulty model response (error, timeout or cut off); the harness must not crash"]
     - [Output, Markdown or a clean error]
@@ -155,16 +153,12 @@ harness:
 router:
   max_parameters: 1500000000
   max_input_tokens: 4096
-  latency_gate_ms: 300
   reference: null
   rows:
     - [Runs, alongside the system on the same envelope]
     - [Max size, "≤ 1,500,000,000 parameters"]
     - [Max input, "4,096 tokens: the output Markdown"]
-    - [Added latency (p95), under 300 ms per page]
     - [Output, "draft_correct: the probability from 0 to 1 that the page passes"]
-    - [Scored on, "calibration (Brier score) and separation of passing from failing pages (AUROC)"]
-    - [Baseline, "reference router, not published yet"]
 
 escalation:
   spend_cap_multiple: 1.5
@@ -179,15 +173,11 @@ escalation:
     - [Frontier access, "the relay only, vision capable models; frontier models served by inference miners on our network replace these once listed, never outside providers"]
     - [Spend cap, "1.5 × the cost of a full frontier redo per page"]
     - [Output, the same Markdown]
-    - [Scored on, the item score after repair and the cost of the repair]
 
 floors: [0.8, 0.9, 0.95, 0.99]
 item_counts:
-  slm: 100
-  harness: 100
-  router: 60
-  escalation: 100
-  system: 100
+  slm: 25
+  system: 25
 r_class: {1b: 0.02, 3b: 0.05, 8b: 0.10}
 fee:
   tao: 0.005
@@ -201,10 +191,4 @@ serving:
   unit: page
   usd_in_per_mtok: 0.1
   usd_out_per_mtok: 0.55
-  cap_schedule:
-    - {billing_usd_below: 5000, cap: 0.10}
-    - {billing_usd_below: 50000, cap: 0.05}
-    - {cap: 0.02}
-  floor_epochs: 3
-  floor_share: 0.01
   revenue_share: 0.8
