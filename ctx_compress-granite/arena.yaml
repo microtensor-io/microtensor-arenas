@@ -18,9 +18,9 @@ evaluation:
     labels: after_freeze_2
   images:
     engine: {image: "vllm/vllm-openai:v0.32.0", digest: "sha256:6ee133356d49ed24cee03dd0cda3d3980279a11c107ce3e752c89e76540f41c9"}
-    runner: {image: "ghcr.io/microtensor-io/runner:1", digest: "sha256:8959dbbdb93d6ef8d3232f6e3d9a2dd91f272385d52a6c382ee877ff5cc24c74"}
-    sandbox: {image: "ghcr.io/microtensor-io/sandbox:1", digest: "sha256:bd21e311386d45e15d3a99e9793a5a6ee0124159b1a46361036bebf964caee67"}
-    replayer: {image: "ghcr.io/microtensor-io/replayer:1", digest: "sha256:2627b5b56c0c1977e41706ba02350f7f50b11824df5bc0a5ccb49c8920828bdc"}
+    runner: {image: "ghcr.io/microtensor-io/runner:1", digest: "sha256:0dd800d35e377534eea2ae137eeea38efb9770f94362e976ee07aa84a0d35fe9"}
+    sandbox: {image: "ghcr.io/microtensor-io/sandbox:1", digest: "sha256:96662aebd4c327e16a9e308a92fb738be2b385e7a528761a74386c07e7a0fcc5"}
+    replayer: {image: "ghcr.io/microtensor-io/replayer:1", digest: "sha256:074d84c005abd6129c3bc958b494a28a8e109b392b5dae9c7c56fcfa0ddf355d"}
     llama: {image: "ghcr.io/ggml-org/llama.cpp:server", digest: "sha256:43b3988c22c00faae3d04a8f6e3eba41403dff7c5f5952490599f1bcbdc6f3c2"}
   probe:
     model: Qwen/Qwen2.5-1.5B-Instruct-GGUF
