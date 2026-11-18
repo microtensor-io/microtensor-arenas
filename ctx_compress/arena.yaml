@@ -18,9 +18,9 @@ evaluation:
     labels: after_freeze_2
   images:
     engine: {image: "vllm/vllm-openai:v0.32.0", digest: "sha256:6ee133356d49ed24cee03dd0cda3d3980279a11c107ce3e752c89e76540f41c9"}
-    runner: {image: "ghcr.io/microtensor-io/runner:1", digest: "sha256:8959dbbdb93d6ef8d3232f6e3d9a2dd91f272385d52a6c382ee877ff5cc24c74"}
-    sandbox: {image: "ghcr.io/microtensor-io/sandbox:1", digest: "sha256:bd21e311386d45e15d3a99e9793a5a6ee0124159b1a46361036bebf964caee67"}
-    replayer: {image: "ghcr.io/microtensor-io/replayer:1", digest: "sha256:2627b5b56c0c1977e41706ba02350f7f50b11824df5bc0a5ccb49c8920828bdc"}
+    runner: {image: "ghcr.io/microtensor-io/runner:1", digest: "sha256:f7a57bb476f5e6b12bb1f58c2a27d30d7a26ac646791d820b036cd9ce41bd544"}
+    sandbox: {image: "ghcr.io/microtensor-io/sandbox:1", digest: "sha256:6813266e01286470189820ab93a4547fc1496f1f99fc5d0c697ff15ca4160f29"}
+    replayer: {image: "ghcr.io/microtensor-io/replayer:1", digest: "sha256:5e7c5e59ca2b14b282859946113212a60868973f663cc53af3495c7d27253f80"}
     llama: {image: "ghcr.io/ggml-org/llama.cpp:server", digest: "sha256:43b3988c22c00faae3d04a8f6e3eba41403dff7c5f5952490599f1bcbdc6f3c2"}
   probe:
     model: Qwen/Qwen2.5-1.5B-Instruct-GGUF
@@ -144,7 +144,7 @@ scoring:
   cap: null
   empty_pools: burn
   router: brier_auroc
-  min_items: 25
+  min_items: 100
 
 harness:
   tools: []
@@ -153,12 +153,14 @@ harness:
   max_steps: 32
   max_total_tokens: 200000
   max_model_calls: 2
+  added_wall_p95_ms: 3000
   chunking: false
   faults: model
   rows:
     - [Role, "wraps the SLM; renders, validates the headings and repairs"]
     - [Model calls, "at most 2 per item: one full pass, one repair pass on the output only"]
     - [Chunking, "not allowed: the full session goes to the model in one call"]
+    - [Added wall time (p95), "≤ 3 s per item"]
     - [Network, none except the gateway]
     - [Faults, "about 1 in 7 items get a faulty model response (error, timeout or cut off); the harness must not crash"]
     - [Output, the nine heading markdown or a clean error]
@@ -167,12 +169,16 @@ harness:
 router:
   max_parameters: 1500000000
   max_input_tokens: 8192
+  latency_gate_ms: 300
   reference: null
   rows:
     - [Runs, alongside the system on the same envelope]
     - [Max size, "≤ 1,500,000,000 parameters"]
     - [Max input, "8,192 tokens: the summary, then the end of the session"]
+    - [Added latency (p95), "under 300 ms per item, measured by the coordinator over 100 drafts on the profile card"]
     - [Output, "draft_correct: the probability from 0 to 1 that the summary passes"]
+    - [Scored on, "calibration (Brier score) and separation of passing from failing summaries (AUROC)"]
+    - [Baseline, "reference router, not published yet"]
 
 escalation:
   spend_cap_multiple: 1.5
@@ -192,11 +198,15 @@ escalation:
     - [Frontier access, "the relay only; both models read 120,000 token sessions; frontier models served by inference miners on our network replace these once listed, never outside providers"]
     - [Spend cap, "1.5 × the cost of a full frontier redo per item"]
     - [Output, the same nine heading markdown]
+    - [Scored on, the item score after repair and the cost of the repair]
 
 floors: [0.8, 0.9, 0.95, 0.99]
 item_counts:
-  slm: 25
-  system: 25
+  slm: 100
+  harness: 100
+  router: 60
+  escalation: 100
+  system: 100
 r_class: {1b: 0.02, 3b: 0.05, 8b: 0.10}
 fee:
   tao: 0.005
@@ -212,4 +222,10 @@ serving:
   rate: 1000
   unit: request
   kind: compaction
+  cap_schedule:
+    - {billing_usd_below: 5000, cap: 0.10}
+    - {billing_usd_below: 50000, cap: 0.05}
+    - {cap: 0.02}
+  floor_epochs: 3
+  floor_share: 0.01
   revenue_share: 0.8

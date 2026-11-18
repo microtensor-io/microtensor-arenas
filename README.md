@@ -6,7 +6,8 @@ Every arena on the network, as the files the definitions are built from. The pag
 
 | Arena | Task | Envelope | Network |
 |---|---|---|---|
-| [ctx_compress](ctx_compress/ARENA.md) | Agent context compression | mt-5 | testnet |
+| [ctx_compress-granite](ctx_compress-granite/ARENA.md) | Agent context compression on Granite 4.0 H Micro | mt-5 | testnet |
+| [ctx_compress](ctx_compress/ARENA.md) | Agent context compression, archived after epoch 0 | mt-5 | testnet |
 | [doc_parse](doc_parse/ARENA.md) | Documents: page parsing | mt-5 | testnet |
 | [sql_gen](sql_gen/ARENA.md) | Databases: SQL generation | mt-5 | testnet |
 
@@ -19,6 +20,7 @@ Each folder holds:
 | `ARENA.md` | The arena page, rendered from `arena.yaml` |
 | `data/README.md` | The attached dataset and how to build dev items from it |
 | `CHANGELOG.md` | What changed and when |
+| `archived.yaml` | Only in an archived arena: its successor and the epochs it settled |
 
 ## Shared files
 
@@ -30,13 +32,15 @@ Each folder holds:
 
 An arena names one group and may only tighten its limits. It names exactly one base model, the one miners fine tune from and are scored against; it comes from the shared list and must fit its group. An arena lists its allowed profiles from the shared list, only those the coordinator checks (P1 today), and pins every image by digest, never by tag alone. The same values are served at `GET /v2/envelopes`, `GET /v2/bases` and `GET /v2/profiles`.
 
-Every arena pays two pools from all of the subnet's miner emission: the specialist model pool takes 60% and the full system pool 40%, with no serving or compute share. The harness, router and escalation repair have no pools of their own and are scored inside the full system, so `item_counts` names `slm` and `system` only.
+Every live arena pays two pools from all of the subnet's miner emission: the specialist model pool takes 60% and the full system pool 40%, with no serving or compute share. The harness, router and escalation repair have no pools of their own and are scored inside the full system, so `item_counts` names `slm` and `system` only.
+
+An arena id is 1 to 24 lowercase letters, digits, underscores or hyphens, starts with a letter or digit, and is the name of its folder. An arena that has settled an epoch is never redefined: a change of that size is a new arena with its own id, folder and epoch 0, and the old folder is archived with the files its last epoch ran under plus an `archived.yaml`. `mta render`, the definition builder and `mtops` skip an archived arena. ctx_compress settled epoch 0 under five pools and is archived; ctx_compress-granite is its two pool successor.
 
 ## Dev items
 
 ```
 pip install -e ".[compress]"
-mta dev --arena ctx_compress --count 200 --out data/dev
+mta dev --arena ctx_compress-granite --count 200 --out data/dev
 mta check data/dev
 ```
 

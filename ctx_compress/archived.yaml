@@ -1,0 +1,6 @@
+successor: ctx_compress-granite
+epochs: [0]
+note: >-
+  Closed after epoch 0, which settled under the five pools, image pins and timing in this folder.
+  It is never redefined or reopened; its two pool successor ctx_compress-granite starts at its own
+  epoch 0.

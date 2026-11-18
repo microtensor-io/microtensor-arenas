@@ -3,6 +3,8 @@ from pathlib import Path
 
 from arenas.compress import build, canon, hidden, sources, synth
 
+ARENA = "ctx_compress-granite"
+
 
 def count(text: str) -> int:
     return max(1, len(text) // 4)
@@ -18,7 +20,7 @@ def test_sessions_follow_their_seed():
 
 def test_dev_items_pass_the_check():
     pool, report = build.generate(
-        "ctx_compress", 3, 2, [("synth", Path("4@20000-26000"))], min_tokens=2_000, count=count
+        ARENA, 3, 2, [("synth", Path("4@20000-26000"))], min_tokens=2_000, count=count
     )
     assert report["sessions"] == 2
     assert any(item["twin_of"] for item in pool.items)
@@ -30,7 +32,7 @@ def test_dev_items_pass_the_check():
 def test_hidden_items_keep_the_seed_secret(tmp_path):
     seed = hidden.new_seed()
     report = hidden.build_hidden(
-        "ctx_compress",
+        ARENA,
         seed,
         [("synth", Path("6@20000-26000"))],
         tmp_path,
@@ -94,7 +96,7 @@ def test_pi_sessions_follow_the_active_branch(tmp_path):
 
 def test_attached_probes_must_be_in_the_session():
     pool, _ = build.generate(
-        "ctx_compress", 3, 1, [("synth", Path("4@20000-26000"))], min_tokens=2_000, count=count
+        ARENA, 3, 1, [("synth", Path("4@20000-26000"))], min_tokens=2_000, count=count
     )
     item = pool.items[0]
     item["label"]["attached"] = [
