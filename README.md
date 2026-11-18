@@ -26,9 +26,11 @@ Each folder holds:
 |---|---|
 | `shared/envelopes.yaml` | The six envelope classes (mt-1 Budget phone, mt-2 Phone, mt-3 CPU, mt-4 AI PC, mt-5 Small GPU, mt-6 Large), which are open on testnet and mainnet, their rules and how validators measure them |
 | `shared/bases.yaml` | Every allowed base model with its pinned revision, licence, size, the groups it fits and any licence condition |
-| `shared/profiles.yaml` | The hardware profiles miners and validators run on (P1 to P3, K, C): one GPU architecture, precision and batching mode each, with the calibration rule a profile must pass |
+| `shared/profiles.yaml` | The hardware profiles miners run their jobs on and spot checks rerun calls on, by the coordinator or by a validator with a GPU of the profile (P1 to P3, K, C): one GPU architecture, precision and batching mode each, with the calibration rule a profile must pass |
 
-An arena names one group and may only tighten its limits. It names exactly one base model, the one miners fine tune from and are scored against; it comes from the shared list and must fit its group. An arena lists its allowed profiles from the shared list and pins every image by digest, never by tag alone. The same values are served at `GET /v2/envelopes`, `GET /v2/bases` and `GET /v2/profiles`.
+An arena names one group and may only tighten its limits. It names exactly one base model, the one miners fine tune from and are scored against; it comes from the shared list and must fit its group. An arena lists its allowed profiles from the shared list, only those the coordinator checks (P1 today), and pins every image by digest, never by tag alone. The same values are served at `GET /v2/envelopes`, `GET /v2/bases` and `GET /v2/profiles`.
+
+Every arena pays two pools from all of the subnet's miner emission: the specialist model pool takes 60% and the full system pool 40%, with no serving or compute share. The harness, router and escalation repair have no pools of their own and are scored inside the full system, so `item_counts` names `slm` and `system` only.
 
 ## Dev items
 

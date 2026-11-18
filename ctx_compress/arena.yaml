@@ -144,7 +144,7 @@ scoring:
   cap: null
   empty_pools: burn
   router: brier_auroc
-  min_items: 100
+  min_items: 25
 
 harness:
   tools: []
@@ -153,14 +153,12 @@ harness:
   max_steps: 32
   max_total_tokens: 200000
   max_model_calls: 2
-  added_wall_p95_ms: 3000
   chunking: false
   faults: model
   rows:
     - [Role, "wraps the SLM; renders, validates the headings and repairs"]
     - [Model calls, "at most 2 per item: one full pass, one repair pass on the output only"]
     - [Chunking, "not allowed: the full session goes to the model in one call"]
-    - [Added wall time (p95), "≤ 3 s per item"]
     - [Network, none except the gateway]
     - [Faults, "about 1 in 7 items get a faulty model response (error, timeout or cut off); the harness must not crash"]
     - [Output, the nine heading markdown or a clean error]
@@ -169,16 +167,12 @@ harness:
 router:
   max_parameters: 1500000000
   max_input_tokens: 8192
-  latency_gate_ms: 300
   reference: null
   rows:
     - [Runs, alongside the system on the same envelope]
     - [Max size, "≤ 1,500,000,000 parameters"]
     - [Max input, "8,192 tokens: the summary, then the end of the session"]
-    - [Added latency (p95), "under 300 ms per item, measured by the coordinator over 100 drafts on the profile card"]
     - [Output, "draft_correct: the probability from 0 to 1 that the summary passes"]
-    - [Scored on, "calibration (Brier score) and separation of passing from failing summaries (AUROC)"]
-    - [Baseline, "reference router, not published yet"]
 
 escalation:
   spend_cap_multiple: 1.5
@@ -198,15 +192,11 @@ escalation:
     - [Frontier access, "the relay only; both models read 120,000 token sessions; frontier models served by inference miners on our network replace these once listed, never outside providers"]
     - [Spend cap, "1.5 × the cost of a full frontier redo per item"]
     - [Output, the same nine heading markdown]
-    - [Scored on, the item score after repair and the cost of the repair]
 
 floors: [0.8, 0.9, 0.95, 0.99]
 item_counts:
-  slm: 100
-  harness: 100
-  router: 60
-  escalation: 100
-  system: 100
+  slm: 25
+  system: 25
 r_class: {1b: 0.02, 3b: 0.05, 8b: 0.10}
 fee:
   tao: 0.005
@@ -222,10 +212,4 @@ serving:
   rate: 1000
   unit: request
   kind: compaction
-  cap_schedule:
-    - {billing_usd_below: 5000, cap: 0.10}
-    - {billing_usd_below: 50000, cap: 0.05}
-    - {cap: 0.02}
-  floor_epochs: 3
-  floor_share: 0.01
   revenue_share: 0.8

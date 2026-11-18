@@ -13,8 +13,6 @@ from arenas.compress import build
 from arenas.compress.sources import Session
 from arenas.pool import Pool, write
 
-COUNTS = {"slm": 100, "harness": 100, "router": 60, "escalation": 100, "system": 100}
-
 
 def new_seed() -> str:
     return secrets.token_hex(32)
@@ -57,14 +55,14 @@ def build_hidden(
     sources: Iterable[tuple[str, Path]],
     out: Path,
     *,
-    counts: dict[str, int] | None = None,
+    counts: dict[str, int],
     stem: str = "",
     since: date | None = None,
     ledger: Path | None = None,
     min_tokens: int = build.HIDDEN_MIN_TOKENS,
     count: Callable[[str], int] | None = None,
 ) -> dict[str, Any]:
-    wanted = dict(counts or COUNTS)
+    wanted = dict(counts)
     digest = seed_digest(seed)
     prefix = stem or f"{arena_id}-h{digest[:8]}"
     rng = random.Random(hashlib.sha256(f"{seed}:cuts".encode()).digest())

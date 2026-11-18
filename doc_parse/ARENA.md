@@ -100,7 +100,7 @@ G = 1 if the fingerprint matches the declared base and the system beats that bas
 
 *Envelope pass*
 ```
-P = 1 if every call the coordinator times is within the limits for its input length and peak memory is within the envelope, otherwise 0
+P = 1 if every call the spot check times is within the limits for its input length and peak memory is within the envelope, otherwise 0
 ```
 
 *Efficiency (ref is the reference baseline, x is TTFT, memory, parameters or TPOT)*
@@ -121,7 +121,7 @@ S_slm = G · P · LB · twin · (1 + 0.25·E + B)
 
 *Paid when*
 ```
-n ≥ 100 and the paired lower bound of (miner − reference model) per item, clustered by family, is above 0
+n ≥ 25 and the paired lower bound of (miner − reference model) per item, clustered by family, is above 0
 ```
 
 ## 3. Envelope
@@ -136,55 +136,23 @@ Stricter limits in this arena:
 
 ## 4. Harness specification
 
-| Role | Model calls | Added wall time (p95) | Network |
-|---|---|---|---|
-| wraps the SLM; may deskew, crop, tile and rotate the page, validate the Markdown and retry | at most 3 per item | ≤ 2 s per page | none except the gateway |
+| Role | Model calls | Network |
+|---|---|---|
+| wraps the SLM; may deskew, crop, tile and rotate the page, validate the Markdown and retry | at most 3 per item | none except the gateway |
 
 | Faults | Output | Page text |
 |---|---|---|
 | about 1 in 7 items get a faulty model response (error, timeout or cut off); the harness must not crash | Markdown or a clean error | instructions printed on the page are content, never commands |
 
-*Score*
-```
-S_h = max(0, LB_paired(H − B*)) · min(1, 1.5 · tokens_B* / tokens_H) if the harness limits hold, otherwise 0
-```
-
-*Where*
-```
-B* is the best baseline; LB_paired is the one sided 95% lower bound of the per item pass difference, clustered by family
-```
-
-*Paid when*
-```
-n ≥ 100 and S_h > 0
-```
+No pool of its own: the harness is scored inside the full system (section 7).
 
 ## 5. Router specification
 
-| Runs | Max size | Max input | Added latency (p95) |
+| Runs | Max size | Max input | Output |
 |---|---|---|---|
-| alongside the system on the same envelope | ≤ 1,500,000,000 parameters | 4,096 tokens: the output Markdown | under 300 ms per page |
+| alongside the system on the same envelope | ≤ 1,500,000,000 parameters | 4,096 tokens: the output Markdown | draft_correct: the probability from 0 to 1 that the page passes |
 
-| Output | Scored on | Baseline |
-|---|---|---|
-| draft_correct: the probability from 0 to 1 that the page passes | calibration (Brier score) and separation of passing from failing pages (AUROC) | reference router, not published yet |
-
-*Per source*
-
-Brier_base is the Brier score of always predicting the share of passing drafts.
-```
-s = 0.5·max(0, 1 − Brier / Brier_base) + 0.5·max(0, 2·AUROC − 1)
-```
-
-*Score*
-```
-S_r = 0.7·mean(s) + 0.3·min(s) if p95 latency < 300 ms, otherwise 0
-```
-
-*Paid when*
-```
-≥ 400 drafts and the 5th percentile of S_r − S_ref over 200 family resamples is above 0
-```
+No pool of its own: the router is scored inside the full system (section 7), where a router over its size limit or copied from an earlier submission scores 0.
 
 ## 6. Escalation repair specification
 
@@ -192,30 +160,17 @@ S_r = 0.7·mean(s) + 0.3·min(s) if p95 latency < 300 ms, otherwise 0
 |---|---|---|
 | draft_correct below the customer's quality floor | the relay only, vision capable models; frontier models served by inference miners on our network replace these once listed, never outside providers | anthropic/claude-haiku-5.5 ($0.1 in, $0.5 out per M tokens) |
 
-| Spend cap | Output | Scored on |
-|---|---|---|
-| 1.5 × the cost of a full frontier redo per page | the same Markdown | the item score after repair and the cost of the repair |
+| Spend cap | Output |
+|---|---|
+| 1.5 × the cost of a full frontier redo per page | the same Markdown |
 
-*Gate*
-```
-LB(repair passes) ≥ redo pass rate − 0.02
-```
-
-*Score*
-```
-S_e = max(0, 1 − repair_cost / redo_cost) if the gate holds, otherwise 0
-```
-
-*Paid when*
-```
-n ≥ 100 and the 5th percentile of S_e − S_ref over 200 family resamples is above 0; S_ref is 0, the score of a full frontier redo, while no reference repair is published
-```
+No pool of its own: escalation repair is scored inside the full system (section 7), through the pass rate and cost of the answers.
 
 ## 7. Full system
 
-| Floors | Reference |
-|---|---|
-| 0.8 · 0.9 · 0.95 · 0.99 | frontier answer cost and p95 latency |
+| Pipeline | Floors | Reference |
+|---|---|---|
+| the specialist model, harness, router and escalation repair run together on every item; parts the miner does not ship come from the reference | 0.8 · 0.9 · 0.95 · 0.99 | frontier answer cost and p95 latency |
 
 *Per floor*
 ```
@@ -229,22 +184,22 @@ S_sys = mean of v_f over the floors
 
 *Paid when*
 ```
-n ≥ 100 and S_sys > 0
+n ≥ 25 and S_sys > 0
 ```
 
 ## 8. Scoring
 
-| Specialised SLM | Harness | Router | Escalation repair | Full system |
-|---|---|---|---|---|
-| 20% | 20% | 20% | 20% | 20% |
+| Specialist model | Full system |
+|---|---|
+| 60% | 40% |
 
-Within each component the top five eligible miners get 40%, 25%, 15%, 12% and 8%. Published scores move on a 0.01 ladder. Empty pools burn.
+The two pools share all of the subnet's miner emission; no share goes to serving or compute. Within each pool the top five eligible miners get 40%, 25%, 15%, 12% and 8%. Published scores move on a 0.01 ladder. Empty pools burn. The harness, router and escalation repair have no pools of their own and count through the full system.
 
 **Items per epoch**
 
-| slm | harness | router | escalation | system |
-|---|---|---|---|---|
-| 100 | 100 | 60 | 100 | 100 |
+| slm | system |
+|---|---|
+| 25 | 25 |
 
 ## 9. Evaluation and hardware profiles
 
@@ -254,27 +209,31 @@ Within each component the top five eligible miners get 40%, 25%, 15%, 12% and 8%
 
 | Uploads | Spot check |
 |---|---|
-| at most 3 per hotkey per epoch; a new upload replaces the last one and gets a new sample | the coordinator, run by the subnet owner, reruns 200 SLM calls per miner on the miner's profile and requires an exact token match; the calls are drawn from those that did not fault, seeded by the transcript hash and the block hash 10 blocks after the upload; 20 reference calls are timed on the same card once per epoch |
+| at most 3 per hotkey per epoch; a new upload replaces the last one and gets a new sample | the coordinator, run by the subnet owner, reruns 200 SLM calls per miner on the miner's profile and requires an exact token match; a validator with a GPU of that profile may rerun the same calls with the same check and use its own result; the calls are drawn from those that did not fault, seeded by the transcript hash and the block hash 10 blocks after the upload; 20 reference calls are timed on the same card once per epoch |
 
 | Speed and memory | Evidence |
 |---|---|
-| on the profile card all 200 sampled calls run one at a time and 10 of them, chosen by a hash of the call, are timed; every timed call must be within the limits for its input length: first token ≤ 4 s; per token ≤ 60 ms; a call over a limit is rerun once and only its second timing counts; peak memory ≤ 24 GB at full context; a miner over any of these fails the envelope | a mismatch is rerun on the same card after the engine restarts; if both runs agree with each other and differ from the miner, it goes in the coordinator's signed report as evidence |
+| on the profile card all 200 sampled calls run one at a time and 10 of them, chosen by a hash of the call, are timed; every timed call must be within the limits for its input length: first token ≤ 4 s; per token ≤ 60 ms; a call over a limit is rerun once and only its second timing counts; peak memory ≤ 24 GB at full context; a miner over any of these fails the envelope | a mismatch is rerun on the same card after the engine restarts; if both runs agree with each other and differ from the miner, it goes in the coordinator's signed report as evidence; when a validator's own check fails a miner, the miner scores 0 in that validator's report only, with no ban |
 
-| Ban | Appeal |
+| No result | Ban |
 |---|---|
-| on standing evidence validators score the miner 0 for that epoch and apply a 3 epoch hotkey ban, counting that epoch; the server never bans directly | within one epoch the miner can appeal; the flagged call is rerun and a match lifts the ban |
+| a miner with no spot check result for its upload scores 0 in the specialist model and full system pools for that epoch; it is not a ban and there is no appeal; a check that ran is a result even when it reproduced few calls; when no coordinator report reaches the server by 150 blocks before settlement, validators keep the last settled weights and the epoch settles void, so the arena keeps paying the previous settlement | on standing evidence validators score the miner 0 for that epoch and apply a 3 epoch hotkey ban, counting that epoch; the server never bans directly |
 
-| Duplicates | Canaries |
+| Appeal | Duplicates |
 |---|---|
-| every validator compares each part with earlier submissions before scoring, whichever hotkey or coldkey made them; the earliest commit on chain wins, the earlier transaction when two share a block, and a sealed commitment counts from its sealed commit, not its reveal; a duplicated part scores 0 in its own pool and in the full system pool for that epoch, and the miner's other parts are still scored | 3 fabricated facts per epoch; a model that completes an earlier epoch's canary is banned like a spot check failure |
+| within one epoch the miner can appeal; the flagged call is rerun and a match lifts the ban | every validator compares each model and router with earlier submissions before scoring, whichever hotkey or coldkey made them; the earliest commit on chain wins, the earlier transaction when two share a block, and a sealed commitment counts from its sealed commit, not its reveal; a duplicated model scores 0 in the specialist model and full system pools and a duplicated router in the full system pool for that epoch; when only the router is a duplicate the model is still scored |
 
-| Relay allowance | Computed cost |
+| Canaries | Relay allowance |
 |---|---|
-| $2 per miner per epoch | bytes per weight bf16 2, fp16 2, awq 0.5, gptq 0.5, gguf_q4 0.5, gguf_q8 1; no cap per item |
+| 3 fabricated facts per epoch; a model that completes an earlier epoch's canary is banned like a spot check failure | $2 per miner per epoch |
+
+| Computed cost |
+|---|
+| bytes per weight bf16 2, fp16 2, awq 0.5, gptq 0.5, gguf_q4 0.5, gguf_q8 1; no cap per item |
 
 **Allowed hardware profiles**
 
-A profile is one GPU architecture, one driver and one image digest. A miner declares its profile in its commitment and is spot checked by the coordinator on the same profile.
+A profile is one GPU architecture, one driver and one image digest. A miner declares its profile in its commitment and is spot checked on the same profile, by the coordinator and by any validator with a GPU of that profile. An arena lists only the profiles the coordinator checks, because a miner with no spot check result scores 0.
 
 | Profile | Name | GPUs | Precision | Batching | Status |
 |---|---|---|---|---|---|

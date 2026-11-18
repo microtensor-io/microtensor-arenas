@@ -57,11 +57,26 @@ def test_ctx_compress_page_states_the_coordinator_rules() -> None:
         "the server never bans directly",
         "within one epoch the miner can appeal",
         "the earliest commit on chain wins",
-        "in its own pool and in the full system pool",
+        "a duplicated router in the full system pool",
         "at most 3 per hotkey per epoch",
+        "| 60% | 40% |",
+        "a validator with a GPU of that profile may rerun the same calls",
+        "| No result |",
+        "validators keep the last settled weights",
     ):
         assert line in page
-    for stale in ("Resume", "resume", "confirmations", "validators per miner", "at least 99%"):
+    for stale in (
+        "Resume",
+        "resume",
+        "confirmations",
+        "validators per miner",
+        "at least 99%",
+        "20%",
+        "S_h =",
+        "S_r =",
+        "Added wall time",
+        "Added latency",
+    ):
         assert stale not in page
 
 
@@ -83,6 +98,27 @@ def test_miner_mode_renders_section_nine_and_reaches_the_definition() -> None:
     assert definition.evaluation(other) is None
     assert "## 9." not in spec.markdown(spec.build(other))
     assert "evaluation" not in spec.build(other)
+
+
+def test_every_arena_pays_two_pools_on_the_checked_profile() -> None:
+    for arena_id in definition.arena_ids():
+        built = definition.build(arena_id, genesis_block=1, sample_database="0" * 64)
+        body = built["definition"]
+        assert body["item_counts"] == {"slm": 25, "system": 25}
+        assert body["spec"]["scoring"]["shares"] == {"slm": 60, "system": 40}
+        assert body["scoring"]["empty_pools"] == "burn"
+        assert not set(body["serving"]) & {"cap_schedule", "floor_epochs", "floor_share"}
+    arena = definition.load("ctx_compress")
+    for counts, message in (
+        ({"slm": 25, "system": 25, "harness": 25}, "unknown key 'harness'"),
+        ({"slm": 10, "system": 25}, "below scoring.min_items"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            definition.item_counts({**arena, "item_counts": counts})
+    broken = copy.deepcopy(arena)
+    broken["evaluation"]["profiles"] = ["P1", "P2"]
+    with pytest.raises(ValueError, match="no spot check covers"):
+        definition.evaluation(broken)
 
 
 def _tiered() -> dict:

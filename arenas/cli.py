@@ -106,7 +106,7 @@ def _dev(args: argparse.Namespace) -> int:
 
 
 def _hidden(args: argparse.Namespace) -> int:
-    counts = dict(hidden.COUNTS)
+    counts = dict(definition.load(args.arena)["item_counts"])
     if args.epochs > 1:
         counts = {test: n * args.epochs for test, n in counts.items()}
     sessions = sum(counts.values())
