@@ -5,7 +5,7 @@ import math
 
 import pytest
 
-from arenas import definition, envelopes, spec
+from arenas import cli, definition, envelopes, spec
 
 
 def test_profiles_document_matches_the_contract() -> None:
@@ -35,7 +35,7 @@ def test_profiles_document_matches_the_contract() -> None:
     ],
 )
 def test_evaluation_block_is_validated(change, message: str) -> None:
-    arena = definition.load("ctx_compress")
+    arena = definition.load("ctx_compress-granite")
     broken = copy.deepcopy(arena)
     change(broken["evaluation"])
     with pytest.raises(ValueError, match=message):
@@ -43,8 +43,8 @@ def test_evaluation_block_is_validated(change, message: str) -> None:
     assert definition.evaluation(arena) == arena["evaluation"]
 
 
-def test_ctx_compress_page_states_the_coordinator_rules() -> None:
-    page = spec.markdown(spec.build(definition.load("ctx_compress")))
+def test_the_compaction_page_states_the_coordinator_rules() -> None:
+    page = spec.markdown(spec.build(definition.load("ctx_compress-granite")))
     for line in (
         "reruns 40 SLM calls per miner",
         "all 40 sampled calls run one at a time",
@@ -81,16 +81,16 @@ def test_ctx_compress_page_states_the_coordinator_rules() -> None:
 
 
 def test_miner_mode_renders_section_nine_and_reaches_the_definition() -> None:
-    arena = definition.load("ctx_compress")
+    arena = definition.load("ctx_compress-granite")
     page = spec.markdown(spec.build(arena))
     assert "## 9. Evaluation and hardware profiles" in page
     assert "| P1 | Small GPU |" in page
     assert "`vllm/vllm-openai:v0.32.0`" in page
-    built = definition.build("ctx_compress", genesis_block=1)
+    built = definition.build("ctx_compress-granite", genesis_block=1)
     assert built["definition"]["evaluation"] == arena["evaluation"]
     assert "evaluation" in built["definition"]["spec"]
     with pytest.raises(ValueError, match="settle margin"):
-        definition.build("ctx_compress", genesis_block=1, settle_margin=300)
+        definition.build("ctx_compress-granite", genesis_block=1, settle_margin=300)
     for arena_id in definition.arena_ids():
         loaded = definition.load(arena_id)
         assert loaded["evaluation"]["mode"] == "miner" and list(loaded["profiles"]) == ["P1"]
@@ -104,11 +104,17 @@ def test_every_arena_pays_two_pools_on_the_checked_profile() -> None:
     for arena_id in definition.arena_ids():
         built = definition.build(arena_id, genesis_block=1, sample_database="0" * 64)
         body = built["definition"]
-        assert body["item_counts"] == {"slm": 25, "system": 25}
+        assert set(body["item_counts"]) == {"slm", "system"}
+        assert min(body["item_counts"].values()) >= body["scoring"]["min_items"]
         assert body["spec"]["scoring"]["shares"] == {"slm": 60, "system": 40}
         assert body["scoring"]["empty_pools"] == "burn"
         assert not set(body["serving"]) & {"cap_schedule", "floor_epochs", "floor_share"}
-    arena = definition.load("ctx_compress")
+    granite = definition.build("ctx_compress-granite", genesis_block=1)
+    assert granite["id"] == "ctx_compress-granite"
+    assert granite["definition"]["item_counts"] == {"slm": 50, "system": 50}
+    assert granite["definition"]["scoring"]["min_items"] == 50
+    assert granite["definition"]["fee_tao"] == 0
+    arena = definition.load("ctx_compress-granite")
     for counts, message in (
         ({"slm": 25, "system": 25, "harness": 25}, "unknown key 'harness'"),
         ({"slm": 10, "system": 25}, "below scoring.min_items"),
@@ -119,6 +125,31 @@ def test_every_arena_pays_two_pools_on_the_checked_profile() -> None:
     broken["evaluation"]["profiles"] = ["P1", "P2"]
     with pytest.raises(ValueError, match="no spot check covers"):
         definition.evaluation(broken)
+
+
+def test_the_settled_arena_is_archived_and_its_successor_is_live() -> None:
+    assert definition.archived_ids() == ["ctx_compress"]
+    assert "ctx_compress" not in definition.arena_ids()
+    with pytest.raises(ValueError, match="archived.*successor is ctx_compress-granite"):
+        definition.load("ctx_compress")
+    old = definition.raw("ctx_compress")
+    assert old["item_counts"] == {
+        "slm": 25,
+        "harness": 25,
+        "router": 60,
+        "escalation": 25,
+        "system": 25,
+    }
+    assert old["scoring"]["min_items"] == 25
+    new = definition.load(definition.archive("ctx_compress")["successor"])
+    assert new["task"] == old["task"] == definition.task("ctx_compress")
+    assert new["slm"]["grader"] == old["slm"]["grader"]
+    assert new["slm"]["reference"] == old["slm"]["reference"]
+    assert cli.main(["render", "--check"]) == 0
+    for bad in ("", "Ctx", "-ctx", "a" * 25, "../sql_gen", "ctx compress", "ctx\n"):
+        with pytest.raises(ValueError, match="arena id"):
+            definition.folder(bad)
+    assert definition.checked_id("a" * 24) == "a" * 24
 
 
 def _tiered() -> dict:
@@ -174,7 +205,7 @@ def test_bad_price_bands_and_mixed_modes_are_refused(change, message: str) -> No
 
 
 def test_a_long_prompt_tier_validates_and_stays_out_of_the_page_and_the_relay(monkeypatch) -> None:
-    arena = definition.load("ctx_compress")
+    arena = definition.load("ctx_compress-granite")
     frontier = copy.deepcopy(arena["escalation"]["frontier"])
     frontier[0]["long_prompt"] = _long_prompt()
     assert definition.checked_frontier(frontier) == frontier
@@ -188,9 +219,9 @@ def test_a_long_prompt_tier_validates_and_stays_out_of_the_page_and_the_relay(mo
         "z-ai/glm-5.3-flash ($0.048 in, $0.2 out per M tokens) |"
     ) in page
     monkeypatch.setattr(definition, "load", lambda arena_id: without)
-    relay = definition.relay_catalog("ctx_compress")
+    relay = definition.relay_catalog("ctx_compress-granite")
     monkeypatch.setattr(definition, "load", lambda arena_id: with_tier)
-    assert definition.relay_catalog("ctx_compress") == relay
+    assert definition.relay_catalog("ctx_compress-granite") == relay
     assert all("long_prompt" not in row for row in relay)
 
 
@@ -208,7 +239,7 @@ def test_a_long_prompt_tier_validates_and_stays_out_of_the_page_and_the_relay(mo
     ],
 )
 def test_frontier_entries_are_validated(change, message: str) -> None:
-    frontier = copy.deepcopy(definition.load("ctx_compress")["escalation"]["frontier"])
+    frontier = copy.deepcopy(definition.load("ctx_compress-granite")["escalation"]["frontier"])
     frontier[0]["long_prompt"] = _long_prompt()
     change(frontier[0])
     with pytest.raises(ValueError, match=message):

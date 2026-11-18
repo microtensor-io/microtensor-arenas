@@ -1,0 +1,5 @@
+{
+  "type": "string",
+  "description": "Plain markdown with the nine headings in order as level two headings, nothing before the first.",
+  "pattern": "^## Primary request and intent(?:\\n[\\s\\S]*?)?\\n## Key technical concepts(?:\\n[\\s\\S]*?)?\\n## Files and code sections(?:\\n[\\s\\S]*?)?\\n## Errors and fixes(?:\\n[\\s\\S]*?)?\\n## Problem solving(?:\\n[\\s\\S]*?)?\\n## All user messages(?:\\n[\\s\\S]*?)?\\n## Pending tasks(?:\\n[\\s\\S]*?)?\\n## Current work(?:\\n[\\s\\S]*?)?\\n## Next step(?:\\n[\\s\\S]*)?$"
+}

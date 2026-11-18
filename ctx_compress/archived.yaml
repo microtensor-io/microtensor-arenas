@@ -1,0 +1,8 @@
+successor: ctx_compress-granite
+epochs: [0]
+note: >-
+  Closed after epoch 0, which settled under the five pools, image pins and timing in this folder.
+  Epoch 0 was reissued on 2026-11-05 so a miner job fits in about an hour: 25 items each for slm,
+  harness, escalation and system, 60 for the router, and scoring.min_items 25. It settled under
+  those counts, which arena.yaml and ARENA.md here carry. It is never redefined or reopened; its
+  two pool successor ctx_compress-granite starts at its own epoch 0.

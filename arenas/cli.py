@@ -14,7 +14,7 @@ COMPRESSION = "context_compression"
 
 
 def _task(arena_id: str) -> str:
-    return str(definition.load(arena_id)["task"])
+    return definition.task(arena_id)
 
 
 def _data_note(arena_id: str, dataset: dict[str, str] | None) -> str:

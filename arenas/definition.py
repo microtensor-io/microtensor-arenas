@@ -12,6 +12,8 @@ from arenas import envelopes, spec
 
 ROOT = Path(__file__).resolve().parent.parent
 ARENA_ID = "sql_gen"
+ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,23}\Z")
+ARCHIVED = "archived.yaml"
 NETWORKS = ("testnet", "mainnet")
 EVALUATION_MODES = ("miner",)
 GRADER_TYPES = ("pure_cpu", "model_assisted")
@@ -53,20 +55,66 @@ SCORING: dict[str, Any] = {
 }
 
 
+def _folders() -> list[Path]:
+    return sorted(p.parent for p in ROOT.glob("*/arena.yaml") if ID.match(p.parent.name))
+
+
 def arena_ids() -> list[str]:
-    return sorted(p.parent.name for p in ROOT.glob("*/arena.yaml"))
+    return [p.name for p in _folders() if not (p / ARCHIVED).is_file()]
+
+
+def archived_ids() -> list[str]:
+    return [p.name for p in _folders() if (p / ARCHIVED).is_file()]
+
+
+def checked_id(arena_id: Any) -> str:
+    if not isinstance(arena_id, str) or not ID.match(arena_id):
+        raise ValueError(
+            f"arena id {arena_id!r} must be 1 to 24 lowercase letters, digits, underscores or "
+            "hyphens, starting with a letter or digit"
+        )
+    return arena_id
 
 
 def folder(arena_id: str) -> Path:
-    path = ROOT / arena_id
+    path = ROOT / checked_id(arena_id)
     if not (path / "arena.yaml").is_file():
         raise ValueError(f"no arena folder for {arena_id!r}; known: {', '.join(arena_ids())}")
     return path
 
 
-def load(arena_id: str) -> dict[str, Any]:
+def archive(arena_id: str) -> dict[str, Any] | None:
+    path = folder(arena_id) / ARCHIVED
+    if not path.is_file():
+        return None
+    held = _mapping(yaml.safe_load(path.read_text(encoding="utf-8")), ARCHIVED)
+    checked_id(held.get("successor"))
+    return held
+
+
+def raw(arena_id: str) -> dict[str, Any]:
     path = folder(arena_id)
-    arena = yaml.safe_load((path / "arena.yaml").read_text(encoding="utf-8"))
+    found = _mapping(yaml.safe_load((path / "arena.yaml").read_text(encoding="utf-8")), "arena")
+    if found.get("id") != arena_id:
+        raise ValueError(
+            f"{arena_id}/arena.yaml names id {found.get('id')!r}; the folder name is the arena id"
+        )
+    return found
+
+
+def task(arena_id: str) -> str:
+    return str(raw(arena_id)["task"])
+
+
+def load(arena_id: str) -> dict[str, Any]:
+    held = archive(arena_id)
+    if held is not None:
+        raise ValueError(
+            f"{arena_id} is archived and is never redefined or reopened; its successor is "
+            f"{held['successor']}"
+        )
+    path = folder(arena_id)
+    arena = raw(arena_id)
     arena["schemas"] = {
         name: json.loads((path / "schema" / f"{name}.json").read_text(encoding="utf-8"))
         for name in ("input", "output")
