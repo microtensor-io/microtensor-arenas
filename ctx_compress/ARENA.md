@@ -114,7 +114,7 @@ S_slm = G · P · LB · twin · (1 + 0.25·E + B)
 
 *Paid when*
 ```
-n ≥ 100 and the paired lower bound of (miner − reference model) per item, clustered by family, is above 0
+n ≥ 25 and the paired lower bound of (miner − reference model) per item, clustered by family, is above 0
 ```
 
 ## 3. Envelope
@@ -149,7 +149,7 @@ B* is the best baseline; LB_paired is the one sided 95% lower bound of the per i
 
 *Paid when*
 ```
-n ≥ 100 and S_h > 0
+n ≥ 25 and S_h > 0
 ```
 
 ## 5. Router specification
@@ -201,7 +201,7 @@ S_e = max(0, 1 − repair_cost / redo_cost) if the gate holds, otherwise 0
 
 *Paid when*
 ```
-n ≥ 100 and the 5th percentile of S_e − S_ref over 200 family resamples is above 0; S_ref is 0, the score of a full frontier redo, while no reference repair is published
+n ≥ 25 and the 5th percentile of S_e − S_ref over 200 family resamples is above 0; S_ref is 0, the score of a full frontier redo, while no reference repair is published
 ```
 
 ## 7. Full system
@@ -222,7 +222,7 @@ S_sys = mean of v_f over the floors
 
 *Paid when*
 ```
-n ≥ 100 and S_sys > 0
+n ≥ 25 and S_sys > 0
 ```
 
 ## 8. Scoring
@@ -237,7 +237,7 @@ Within each component the top five eligible miners get 40%, 25%, 15%, 12% and 8%
 
 | slm | harness | router | escalation | system |
 |---|---|---|---|---|
-| 100 | 100 | 60 | 100 | 100 |
+| 25 | 25 | 60 | 25 | 25 |
 
 ## 9. Evaluation and hardware profiles
 

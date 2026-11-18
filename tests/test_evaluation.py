@@ -113,6 +113,7 @@ def test_every_arena_pays_two_pools_on_the_checked_profile() -> None:
     assert granite["id"] == "ctx_compress-granite"
     assert granite["definition"]["item_counts"] == {"slm": 50, "system": 50}
     assert granite["definition"]["scoring"]["min_items"] == 50
+    assert granite["definition"]["fee_tao"] == 0
     arena = definition.load("ctx_compress-granite")
     for counts, message in (
         ({"slm": 25, "system": 25, "harness": 25}, "unknown key 'harness'"),
@@ -132,7 +133,14 @@ def test_the_settled_arena_is_archived_and_its_successor_is_live() -> None:
     with pytest.raises(ValueError, match="archived.*successor is ctx_compress-granite"):
         definition.load("ctx_compress")
     old = definition.raw("ctx_compress")
-    assert set(old["item_counts"]) == {"slm", "harness", "router", "escalation", "system"}
+    assert old["item_counts"] == {
+        "slm": 25,
+        "harness": 25,
+        "router": 60,
+        "escalation": 25,
+        "system": 25,
+    }
+    assert old["scoring"]["min_items"] == 25
     new = definition.load(definition.archive("ctx_compress")["successor"])
     assert new["task"] == old["task"] == definition.task("ctx_compress")
     assert new["slm"]["grader"] == old["slm"]["grader"]

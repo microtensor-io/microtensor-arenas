@@ -199,7 +199,7 @@ item_counts:
   system: 50
 r_class: {1b: 0.02, 3b: 0.05, 8b: 0.10}
 fee:
-  tao: 0.005
+  tao: 0
   coldkey: 5G9ca9pgbCa63aJWbDAF3dNLhUtbFDYf1fnPMnByf9uyUNFh
 chat:
   fields: {system: system, user: user}

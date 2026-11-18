@@ -144,7 +144,7 @@ scoring:
   cap: null
   empty_pools: burn
   router: brier_auroc
-  min_items: 100
+  min_items: 25
 
 harness:
   tools: []
@@ -202,11 +202,11 @@ escalation:
 
 floors: [0.8, 0.9, 0.95, 0.99]
 item_counts:
-  slm: 100
-  harness: 100
+  slm: 25
+  harness: 25
   router: 60
-  escalation: 100
-  system: 100
+  escalation: 25
+  system: 25
 r_class: {1b: 0.02, 3b: 0.05, 8b: 0.10}
 fee:
   tao: 0.005
