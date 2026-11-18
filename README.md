@@ -34,7 +34,7 @@ An arena names one group and may only tighten its limits. It names exactly one b
 
 Every live arena pays two pools from all of the subnet's miner emission: the specialist model pool takes 60% and the full system pool 40%, with no serving or compute share. The harness, router and escalation repair have no pools of their own and are scored inside the full system, so `item_counts` names `slm` and `system` only.
 
-An arena id is 1 to 24 lowercase letters, digits, underscores or hyphens, starts with a letter or digit, and is the name of its folder. An arena that has settled an epoch is never redefined: a change of that size is a new arena with its own id, folder and epoch 0, and the old folder is archived with the files its last epoch ran under plus an `archived.yaml`. `mta render`, the definition builder and `mtops` skip an archived arena. ctx_compress settled epoch 0 under five pools and is archived; ctx_compress-granite is its two pool successor.
+An arena id is 1 to 24 lowercase letters, digits, underscores or hyphens, starts with a letter or digit, and is the name of its folder. An arena that has settled an epoch is never redefined: a change of that size is a new arena with its own id, folder and epoch 0, and the old folder is archived with the files its last epoch ran under plus an `archived.yaml`. `mta render`, the definition builder and the operator tools skip an archived arena. ctx_compress settled epoch 0 under five pools and is archived; ctx_compress-granite is its two pool successor.
 
 ## Dev items
 
